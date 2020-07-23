@@ -14,8 +14,8 @@ open Browser
 // CONSTANTS
 
 let tileSizePx = 30
-let screenWidthSteps = 20
-let screenHeightSteps = 30
+let screenWidthSteps = 15
+let screenHeightSteps = 20
 
 // MODEL
 
@@ -29,7 +29,7 @@ type Msg =
     | Rotate
 
 let init() : Model * Cmd<Msg>= 
-    { GameState = Tetris.initGameState { WidthTiles = screenWidthSteps; HeightTiles = screenWidthSteps } }, Cmd.none
+    { GameState = Tetris.initGameState { WidthTiles = screenWidthSteps; HeightTiles = screenHeightSteps } }, Cmd.none
 
 // UPDATE
 
@@ -41,10 +41,13 @@ let update (msg:Msg) (model: Model) =
 
 // VIEW (rendered with React)
 
-let tileView (left: int) (top: int) (tileSize: int) (color: string) = 
+let drawTile ({ Col = col; Row = row }: Tetris.Position) (tileSize: int) (color: string) = 
     let generatePoint (x, y) =
         (x |> string) + ", " + (y |> string)
     
+    let left = col * tileSize
+    let top = row * tileSize
+
     let points = [(left, top); (left + tileSize, top); (left + tileSize, top + tileSize); (left, top + tileSize)]
     let svgPointsAttr = points |> Seq.map generatePoint |> String.concat " "
 
@@ -63,18 +66,30 @@ let drawPiece (tileSize: int) (piece: Tetris.Piece) =
         ] 
         (shape |> Seq.map (fun tile ->
             match tile.Type with
-            | Tetromino.Filled -> tileView (tile.Position.Col * tileSize) (tile.Position.Row * tileSize) tileSize "yellow" |> Some
-            | Tetromino.Empty -> tileView (tile.Position.Col * tileSize) (tile.Position.Row * tileSize) tileSize "gray" |> Some
+            | Tetromino.Filled -> drawTile tile.Position tileSize "yellow" |> Some
+            | Tetromino.Empty -> None
+            ) |> Seq.choose id |> Seq.toArray)
+
+let drawScreen (tileSize: int) (screen: Tetris.Screen) =
+    svg [ Style [ 
+            Position PositionOptions.Absolute
+            Height (tileSize * screenHeightSteps)
+            Width (tileSize * screenWidthSteps)
+            ] ] 
+        (screen |> Seq.map (fun tile ->
+            match tile.Type with
+            | Tetromino.Filled -> drawTile tile.Position tileSize "yellow" |> Some
+            | Tetromino.Empty -> drawTile tile.Position tileSize "gray" |> Some
             ) |> Seq.choose id |> Seq.toArray)
 
 let view (model: Model) dispatch =
 
-  div []
+  div [ Style [ Position PositionOptions.Relative ] ]
       [ 
           button [ OnClick (fun _ -> dispatch Rotate) ] [str "Rotate"]
-          div [ Style [ Height "600px"; Width "500px"; BackgroundColor "orange" ] ] [
+          drawScreen tileSizePx model.GameState.Screen
           drawPiece tileSizePx model.GameState.CurrentPiece
-      ] ]
+      ] 
 
 let timer initial =
     let sub dispatch =
@@ -84,6 +99,6 @@ let timer initial =
 // App
 Program.mkProgram init update view
 |> Program.withReactSynchronous "elmish-app"
- |> Program.withSubscription timer
+|> Program.withSubscription timer
 |> Program.withConsoleTrace
 |> Program.run

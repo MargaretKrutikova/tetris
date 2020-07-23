@@ -12,6 +12,9 @@ type Position = {
   Col: int
 }
 
+let positionsEqual (posLeft: Position) (posRight: Position): bool =
+  posLeft.Row = posRight.Row && posLeft.Col = posRight.Col
+
 type Tile = {
   Type: TileType
   Position: Position
@@ -20,7 +23,7 @@ type Tile = {
 let makeTile (tileType: TileType) (row: int) (col: int): Tile =
   { Type = tileType; Position = { Row = row; Col = col } }
 
-type Screen = Tile[][]
+type Screen = Tile[]
 
 module Shape =
   type Shape = Tile[]
@@ -60,7 +63,7 @@ type Dimensions = {
 let makeEmptyScreen (dimensions: Dimensions) : Screen =
   Array.init dimensions.HeightTiles (fun rowIndex -> 
     Array.init dimensions.WidthTiles (fun colIndex -> makeTile Empty rowIndex colIndex)
-  )
+  ) |> Seq.concat |> Seq.toArray
 
 let generateNewPiece (screenColumns: int) =
   {
@@ -92,9 +95,7 @@ let getTileAbsolutePosition (screenPosition: Position) (tile: Tile): Position =
 
 let isPositionOccuped (screen: Screen) (position: Position) =
   screen 
-    |> Seq.tryItem position.Row 
-    |> Option.map (Seq.tryItem position.Col) 
-    |> Option.flatten
+    |> Seq.tryFind (fun tile -> positionsEqual tile.Position position)
     |> Option.map (fun tile -> isTileFilled tile.Type)
     |> Option.defaultValue true
 
@@ -104,32 +105,28 @@ let hasPieceLanded (screen: Screen) (piece: Piece) =
     |> Seq.map (getTileAbsolutePosition piece.Position >> movePositionDown)
     |> Seq.exists (isPositionOccuped screen)
 
+let drawPiece (piece: Piece) (screen: Screen): Screen =
+  let tilesToDraw = 
+    piece.Shape 
+    |> Seq.filter (fun tile -> isTileFilled tile.Type)
+    |> Seq.map (getTileAbsolutePosition piece.Position)
+  
+  let shouldFill (position) =
+    tilesToDraw |> Seq.exists (positionsEqual position)
+
+  screen 
+    |> Seq.map (fun tile -> if shouldFill tile.Position then { tile with Type = Filled } else tile) 
+    |> Seq.toArray
+
 let gameLoop (gameState: GameState): GameState =
   // is game over?
   // is falling?
   if hasPieceLanded gameState.Screen gameState.CurrentPiece then
     let nextPiece = generateNewPiece gameState.ScreenWidth
-    { gameState with CurrentPiece = nextPiece }
+    let screen = drawPiece gameState.CurrentPiece gameState.Screen
+    { gameState with Screen = screen; CurrentPiece = nextPiece }
   else 
     let nextPosition = movePositionDown gameState.CurrentPiece.Position
     let currentPiece: Piece = { gameState.CurrentPiece with Position = nextPosition }
     { gameState with CurrentPiece = currentPiece }
 
-//------------------------------------------------------
-
-let copyScreen (screen: Screen): Screen =
-  let arrays = screen |> Seq.cast<Tile[]>
-  arrays |> Seq.map Array.copy |> Seq.toArray
-
-let drawShape (shape: Shape.Shape) (position: Position) (screen: Screen): Screen =
-  let copyScreen = screen |> copyScreen
-  shape |> Seq.iter (fun tile ->
-    match tile.Type with
-      | Empty -> ignore()
-      | Filled ->
-        let (x, y) = (position.Row + tile.Position.Row, position.Col + tile.Position.Col)
-        copyScreen.[x].[y] <- makeTile Filled x y
-    
-  )
-
-  copyScreen

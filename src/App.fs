@@ -9,10 +9,11 @@ open Elmish
 open Elmish.React
 open Fable.React
 open Fable.React.Props
+open Browser
 
 // CONSTANTS
 
-let tileSizePx = 20
+let tileSizePx = 30
 let screenWidthSteps = 20
 let screenHeightSteps = 30
 
@@ -25,6 +26,7 @@ type Model = {
 type Msg =
     | GameLoop
     | GameAction
+    | Rotate
 
 let init() : Model * Cmd<Msg>= 
     { GameState = Tetris.initGameState { WidthTiles = screenWidthSteps; HeightTiles = screenWidthSteps } }, Cmd.none
@@ -35,6 +37,7 @@ let update (msg:Msg) (model: Model) =
     match msg with
     | GameLoop -> { model with GameState = Tetris.gameLoop model.GameState }, Cmd.none
     | GameAction -> model, Cmd.none
+    | Rotate -> { model with GameState = Tetris.rotateShape model.GameState }, Cmd.none
 
 // VIEW (rendered with React)
 
@@ -47,32 +50,40 @@ let tileView (left: int) (top: int) (tileSize: int) (color: string) =
 
     polygon [ SVGAttr.Stroke("black"); SVGAttr.Fill(color); Points(svgPointsAttr) ] []
 
-let shapeView (tileSize: int) (positon: Tetris.ShapePosition) (shape: Tetris.Shape) =
+let drawPiece (tileSize: int) (piece: Tetris.Piece) =
+    let shape = piece.Shape
+    let position = piece.Position
+
     svg [
-          SVGAttr.Custom ("shape-rendering", "crispEdges")
           Style [ 
             Position PositionOptions.Relative
-            Left (positon.Col * tileSize)
-            Top (positon.Row * tileSize)
+            Left (position.Col * tileSize)
+            Top (position.Row * tileSize)
            ] 
         ] 
-        (shape |> Seq.mapi (fun rowInd row -> 
-                row |> Seq.mapi (fun colInd tile ->
-                    match tile with
-                    | Tetris.Filled -> tileView (colInd * tileSize) (rowInd * tileSize) tileSize "yellow" |> Some
-                    | Tetris.Empty -> None
-                )
-        ) |> Seq.concat |> Seq.choose id |> Seq.toArray)
+        (shape |> Seq.map (fun tile ->
+            match tile.Type with
+            | Tetris.Filled -> tileView (tile.Position.Col * tileSize) (tile.Position.Row * tileSize) tileSize "yellow" |> Some
+            | Tetris.Empty -> tileView (tile.Position.Col * tileSize) (tile.Position.Row * tileSize) tileSize "gray" |> Some
+            ) |> Seq.choose id |> Seq.toArray)
 
 let view (model: Model) dispatch =
 
   div []
-      [ div [ Style [ Height "600px"; Width "500px"; BackgroundColor "orange" ] ] [
-          Tetris.makeShape () |> shapeView tileSizePx { Row = 10; Col = 5 }
+      [ 
+          button [ OnClick (fun _ -> dispatch Rotate) ] [str "Rotate"]
+          div [ Style [ Height "600px"; Width "500px"; BackgroundColor "orange" ] ] [
+          drawPiece tileSizePx model.GameState.CurrentPiece
       ] ]
+
+let timer initial =
+    let sub dispatch =
+        window.setInterval ((fun _ -> dispatch GameLoop), 300, []) |> ignore
+    Cmd.ofSub sub
 
 // App
 Program.mkProgram init update view
 |> Program.withReactSynchronous "elmish-app"
+ |> Program.withSubscription timer
 |> Program.withConsoleTrace
 |> Program.run

@@ -63,8 +63,8 @@ let drawPiece (tileSize: int) (piece: Tetris.Piece) =
         ] 
         (shape |> Seq.map (fun tile ->
             match tile.Type with
-            | Tetris.Filled -> tileView (tile.Position.Col * tileSize) (tile.Position.Row * tileSize) tileSize "yellow" |> Some
-            | Tetris.Empty -> tileView (tile.Position.Col * tileSize) (tile.Position.Row * tileSize) tileSize "gray" |> Some
+            | Tetromino.Filled -> tileView (tile.Position.Col * tileSize) (tile.Position.Row * tileSize) tileSize "yellow" |> Some
+            | Tetromino.Empty -> tileView (tile.Position.Col * tileSize) (tile.Position.Row * tileSize) tileSize "gray" |> Some
             ) |> Seq.choose id |> Seq.toArray)
 
 let view (model: Model) dispatch =

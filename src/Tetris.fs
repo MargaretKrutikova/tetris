@@ -1,6 +1,6 @@
 module Tetris
 
-type TileType = Empty | Filled
+open Tetromino
 
 let isTileFilled =
   function
@@ -22,14 +22,30 @@ let makeTile (tileType: TileType) (row: int) (col: int): Tile =
 
 type Screen = Tile[][]
 
-type Shape = Tile[]
+module Shape =
+  type Shape = Tile[]
+   
+  let rotateClockwise (shape: Shape) =
+    let rows = shape |> Seq.map (fun tile -> tile.Position.Row) |> Seq.max |> (+) 1
+    shape |> Seq.map (fun tile ->
+      let pos = tile.Position
+      makeTile tile.Type (pos.Col) (rows - pos.Row - 1)
+    ) |> Seq.toArray
+
+  let convertToShape (tetromino: Tetromino): Shape =
+    tetromino |> Seq.mapi (fun rowIndex row ->
+      row |> Seq.mapi (fun colIndex value -> makeTile value rowIndex colIndex)) 
+    |> Seq.collect id |> Seq.toArray
+
+let getRandomShape = generateRandomTetromino >> Shape.convertToShape
 
 type Piece = {
   Position: Position
-  Shape: Shape
+  Shape: Shape.Shape
 }
 
 type GameState = {
+  ScreenWidth: int
   Screen: Screen
   CurrentPiece: Piece
 }
@@ -46,34 +62,16 @@ let makeEmptyScreen (dimensions: Dimensions) : Screen =
     Array.init dimensions.WidthTiles (fun colIndex -> makeTile Empty rowIndex colIndex)
   )
 
-module Tetrimino =
-  //type Space = I | O
-  type Tetrimino = Tile[]
-
-  let rotateClockwise (piece: Tetrimino) =
-    let rows = piece |> Seq.map (fun tile -> tile.Position.Row) |> Seq.max |> (+) 1
-    piece |> Seq.map (fun tile ->
-      let pos = tile.Position
-      makeTile tile.Type (pos.Col) (rows - pos.Row - 1)
-    ) |> Seq.toArray
-
-  let makeShape (): Tetrimino =
-    [|
-      [|1; 1; 0|];
-      [|0; 1; 1|];
-      [|0; 0; 0|];
-    |] |> Seq.mapi (fun rowIndex row ->
-      row |> Seq.mapi (fun colIndex value ->
-          let tileType =
-            match value with
-            | 0 -> Empty
-            | _ -> Filled
-          makeTile tileType rowIndex colIndex
-      )) |> Seq.collect id |> Seq.toArray
+let generateNewPiece (screenColumns: int) =
+  {
+    Position = { Row = 0; Col = screenColumns / 2 }
+    Shape = getRandomShape() 
+  }
 
 let initGameState (dimensions: Dimensions): GameState = {
+  ScreenWidth = dimensions.WidthTiles;
   Screen = makeEmptyScreen(dimensions)
-  CurrentPiece = { Position = { Row = 0; Col = dimensions.WidthTiles / 2 }; Shape = Tetrimino.makeShape()  }
+  CurrentPiece = generateNewPiece dimensions.WidthTiles
 }
   
 let movePositionDown (position: Position): Position =
@@ -86,7 +84,7 @@ let movePositionLeft (position: Position): Position =
   { position with Col = position.Col - 1 }
 
 let rotateShape (gameState: GameState): GameState =
-  let rotatedPiece = { gameState.CurrentPiece with Shape = Tetrimino.rotateClockwise gameState.CurrentPiece.Shape }
+  let rotatedPiece = { gameState.CurrentPiece with Shape = Shape.rotateClockwise gameState.CurrentPiece.Shape }
   { gameState with CurrentPiece = rotatedPiece }
 
 let getTileAbsolutePosition (screenPosition: Position) (tile: Tile): Position =
@@ -110,8 +108,8 @@ let gameLoop (gameState: GameState): GameState =
   // is game over?
   // is falling?
   if hasPieceLanded gameState.Screen gameState.CurrentPiece then
-    // generate new piece
-    gameState
+    let nextPiece = generateNewPiece gameState.ScreenWidth
+    { gameState with CurrentPiece = nextPiece }
   else 
     let nextPosition = movePositionDown gameState.CurrentPiece.Position
     let currentPiece: Piece = { gameState.CurrentPiece with Position = nextPosition }
@@ -123,7 +121,7 @@ let copyScreen (screen: Screen): Screen =
   let arrays = screen |> Seq.cast<Tile[]>
   arrays |> Seq.map Array.copy |> Seq.toArray
 
-let drawShape (shape: Shape) (position: Position) (screen: Screen): Screen =
+let drawShape (shape: Shape.Shape) (position: Position) (screen: Screen): Screen =
   let copyScreen = screen |> copyScreen
   shape |> Seq.iter (fun tile ->
     match tile.Type with

@@ -98,9 +98,7 @@ let drawScreen (state: Tetris.GameState) =
             ) |> Seq.choose id |> Seq.toArray)
 
 let view (model: Model) dispatch =
-  div [ Style [ Position PositionOptions.Relative; ];
-        OnKeyDown (fun e -> e.key |> keyToGameInput |> KeyPressed |> dispatch) 
-       ]
+  div [ Style [ Position PositionOptions.Relative; ] ]
       [ 
           drawScreen model.GameState
           drawPiece model.GameState.CurrentPiece

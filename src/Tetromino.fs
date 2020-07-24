@@ -9,7 +9,7 @@ type Tetromino = TileType [][]
 let converTetrominoToShape (tetromino: Tetromino): Shape =
   tetromino 
   |> Seq.mapi (fun rowIndex row ->
-    row |> Seq.mapi (fun colIndex value -> makeTile value rowIndex colIndex)) 
+    row |> Seq.mapi (fun colIndex value -> Tile.make value rowIndex colIndex)) 
   |> Seq.collect id |> Seq.toArray
 
 let private intToTileType =

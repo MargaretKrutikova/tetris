@@ -5,111 +5,87 @@ open Tetris.Tetromino
 
 let getRandomShape = generateRandomTetromino >> converTetrominoToShape
 
-module Constants = 
-  let widthCellsCount = 10
-  let heightCellsCount = 24
-
-type Screen = Tile[]
-
-type Piece = {
-  Position: Position
-  Shape: Shape
-}
+module Constants =
+  [<Literal>]
+  let Width = 10
+  
+  [<Literal>]
+  let Height = 20
 
 type GameState = {
   ScreenWidth: int
+  ScreenHeight: int
   Screen: Screen
   CurrentPiece: Piece
 }
 
+let getShapeInitialPosition (shape: Shape): Position =
+  { Row = 0; Col = (Constants.Width - Shape.getWidth shape) /2 }
+
+let generateNewPiece () =
+  let shape = getRandomShape ()
+  { Position = getShapeInitialPosition shape; Shape = shape }
+
+let initGameState (): GameState = {
+  ScreenWidth = Constants.Width
+  ScreenHeight = Constants.Height
+  Screen = Screen.makeEmptyScreen (Screen.Width Constants.Width) (Screen.Height Constants.Height)
+  CurrentPiece = generateNewPiece ()
+}
+
 type GameInput = Up | Left | Right | NoOp
 
-let keyToGameInput (key: string): GameInput =
-    match key with
-    | "ArrowUp" -> Up
-    | "ArrowLeft" -> Left
-    | "ArrowRight" -> Right
-    | _ -> NoOp
+module Collision =
+  let private isPositionOccuped (screen: Screen) (position: Position) =
+    screen 
+      |> Seq.tryFind (fun tile -> Position.areEqual tile.Position position)
+      |> Option.map (fun tile -> isTileFilled tile.Type)
+      |> Option.defaultValue true
 
-type Dimensions = {
-  WidthTiles: int
-  HeightTiles: int
-}
+  let hasCollisions (screen: Screen) (piece: Piece) =
+    piece.Shape 
+      |> Seq.filter (fun value -> isTileFilled value.Type)
+      |> Seq.map (Screen.getTileAbsolutePosition piece.Position)
+      |> Seq.exists (isPositionOccuped screen)
 
-let makeEmptyScreen (dimensions: Dimensions) : Screen =
-  Array.init dimensions.HeightTiles (fun rowIndex -> 
-    Array.init dimensions.WidthTiles (fun colIndex -> makeTile Empty rowIndex colIndex)
-  ) |> Seq.concat |> Seq.toArray
-
-let generateNewPiece (screenColumns: int) =
-  {
-    Position = { Row = 0; Col = screenColumns / 2 }
-    Shape = getRandomShape() 
-  }
-
-let initGameState (dimensions: Dimensions): GameState = {
-  ScreenWidth = dimensions.WidthTiles;
-  Screen = makeEmptyScreen(dimensions)
-  CurrentPiece = generateNewPiece dimensions.WidthTiles
-}
-  
-let rotateShape (gameState: GameState): GameState =
-  let rotatedPiece = { gameState.CurrentPiece with Shape = rotateClockwise gameState.CurrentPiece.Shape }
-  { gameState with CurrentPiece = rotatedPiece }
-
-let getTileAbsolutePosition (screenPosition: Position) (tile: Tile): Position =
-  { Row =  tile.Position.Row + screenPosition.Row; Col = tile.Position.Col + screenPosition.Col}
-
-let isPositionOccuped (screen: Screen) (position: Position) =
-  screen 
-    |> Seq.tryFind (fun tile -> positionsEqual tile.Position position)
-    |> Option.map (fun tile -> isTileFilled tile.Type)
-    |> Option.defaultValue true
+let updatePieceIfNoCollision (gameState: GameState) (piece: Piece) =
+  if (Collision.hasCollisions gameState.Screen piece) then
+    gameState
+  else 
+    { gameState with CurrentPiece = piece }
 
 let hasPieceLanded (screen: Screen) (piece: Piece) =
-  piece.Shape 
-    |> Seq.filter (fun value -> isTileFilled value.Type)
-    |> Seq.map (getTileAbsolutePosition piece.Position >> movePositionDown)
-    |> Seq.exists (isPositionOccuped screen)
+  piece |> Piece.updatePosition Position.moveDown |> Collision.hasCollisions screen
 
 let drawPiece (piece: Piece) (screen: Screen): Screen =
   let tilesToDraw = 
     piece.Shape 
     |> Seq.filter (fun tile -> isTileFilled tile.Type)
-    |> Seq.map (getTileAbsolutePosition piece.Position)
+    |> Seq.map (Screen.getTileAbsolutePosition piece.Position)
   
   let shouldFill (position) =
-    tilesToDraw |> Seq.exists (positionsEqual position)
-
+    tilesToDraw |> Seq.exists (Position.areEqual position)
   screen 
     |> Seq.map (fun tile -> if shouldFill tile.Position then { tile with Type = Filled } else tile) 
     |> Seq.toArray
 
-let gameLoop (gameState: GameState): GameState =
-  // is game over?
-  // is falling?
-  if hasPieceLanded gameState.Screen gameState.CurrentPiece then
-    let nextPiece = generateNewPiece gameState.ScreenWidth
-    let screen = drawPiece gameState.CurrentPiece gameState.Screen
-    { gameState with Screen = screen; CurrentPiece = nextPiece }
-  else 
-    let nextPosition = movePositionDown gameState.CurrentPiece.Position
-    let currentPiece: Piece = { gameState.CurrentPiece with Position = nextPosition }
-    { gameState with CurrentPiece = currentPiece }
-
-
-let gameInput (input: GameInput) (gameState: GameState) : GameState =
+let gameInput (input: GameInput) (state: GameState) : GameState =
   match input with
   | Left -> 
-    let piece = { gameState.CurrentPiece with Position = movePositionLeft gameState.CurrentPiece.Position }
-    { gameState with CurrentPiece = piece }
+    state.CurrentPiece |> Piece.updatePosition Position.moveLeft |> updatePieceIfNoCollision state
   | Right -> 
-    let piece = { gameState.CurrentPiece with Position = movePositionRight gameState.CurrentPiece.Position }
-    { gameState with CurrentPiece = piece }
+    state.CurrentPiece |> Piece.updatePosition Position.moveRight |> updatePieceIfNoCollision state
   | Up -> 
-    let piece = { gameState.CurrentPiece with Shape = rotateClockwise gameState.CurrentPiece.Shape }
-    { gameState with CurrentPiece = piece }
-  | NoOp -> 
-    gameState
+    state.CurrentPiece |> Piece.updateShape Shape.rotateClockwise |> updatePieceIfNoCollision state
+  | NoOp -> state
 
-   
+let gameLoop (state: GameState): GameState =
+  // is game over?
+  // is falling?
+  if hasPieceLanded state.Screen state.CurrentPiece then
+    let nextPiece = generateNewPiece ()
+    let screen = drawPiece state.CurrentPiece state.Screen
+    { state with Screen = screen; CurrentPiece = nextPiece }
+  else 
+    let currentPiece = state.CurrentPiece |> Piece.updatePosition Position.moveDown
+    { state with CurrentPiece = currentPiece }

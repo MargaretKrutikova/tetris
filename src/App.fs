@@ -14,9 +14,20 @@ open Tetris.Types
 
 // CONSTANTS
 
-let tileSizePx = 30
-let screenWidthSteps = 15
-let screenHeightSteps = 20
+module Styles =
+    [<Literal>]
+    let ScreenColor = "gray"
+
+
+[<Literal>]
+let TileSizePx = 25
+
+let keyToGameInput (key: string): Tetris.GameInput =
+  match key with
+  | "ArrowUp" -> Tetris.Up
+  | "ArrowLeft" -> Tetris.Left
+  | "ArrowRight" -> Tetris.Right
+  | _ -> Tetris.NoOp
 
 // MODEL
 
@@ -28,10 +39,9 @@ type Msg =
     | GameLoop
     | GameAction
     | KeyPressed of Tetris.GameInput 
-    | Rotate
 
 let init() : Model * Cmd<Msg>= 
-    { GameState = Tetris.initGameState { WidthTiles = screenWidthSteps; HeightTiles = screenHeightSteps } }, Cmd.none
+    { GameState = Tetris.initGameState () }, Cmd.none // TODO: pass randomly generated shape from command
 
 // UPDATE
 
@@ -39,66 +49,61 @@ let update (msg:Msg) (model: Model) =
     match msg with
     | GameLoop -> { model with GameState = Tetris.gameLoop model.GameState }, Cmd.none
     | GameAction -> model, Cmd.none
-    | Rotate -> { model with GameState = Tetris.rotateShape model.GameState }, Cmd.none
     | KeyPressed input -> { model with GameState = Tetris.gameInput input model.GameState }, Cmd.none
 
 let keyboardInputs (dispatch) =
     document.addEventListener("keydown", fun e -> 
         let event = e :?> Types.KeyboardEvent
-        event.key |> Tetris.keyToGameInput |> KeyPressed |> dispatch)
+        event.key |> keyToGameInput |> KeyPressed |> dispatch)
 
-// VIEW (rendered with React)
+// VIEW 
 
-let drawTile ({ Col = col; Row = row }: Position) (tileSize: int) (color: string) = 
-    let generatePoint (x, y) =
-        (x |> string) + ", " + (y |> string)
-    
-    let left = col * tileSize
-    let top = row * tileSize
+let drawTile ({ Col = col; Row = row }: Position) (color: string) = 
+    rect [ 
+        SVGAttr.Stroke("black")
+        SVGAttr.Fill(color)
+        SVGAttr.Width(TileSizePx) 
+        SVGAttr.Height(TileSizePx)
+        X(col * TileSizePx)
+        Y(row * TileSizePx)
+      ] []
 
-    let points = [(left, top); (left + tileSize, top); (left + tileSize, top + tileSize); (left, top + tileSize)]
-    let svgPointsAttr = points |> Seq.map generatePoint |> String.concat " "
-
-    polygon [ SVGAttr.Stroke("black"); SVGAttr.Fill(color); Points(svgPointsAttr) ] []
-
-let drawPiece (tileSize: int) (piece: Tetris.Piece) =
+let drawPiece (piece: Piece) =
     let shape = piece.Shape
     let position = piece.Position
 
     svg [
           Style [ 
             Position PositionOptions.Relative
-            Left (position.Col * tileSize)
-            Top (position.Row * tileSize)
+            Left (position.Col * TileSizePx)
+            Top (position.Row * TileSizePx)
            ] 
         ] 
         (shape |> Seq.map (fun tile ->
             match tile.Type with
-            | Filled -> drawTile tile.Position tileSize "yellow" |> Some
+            | Filled -> drawTile tile.Position "yellow" |> Some
             | Empty -> None
             ) |> Seq.choose id |> Seq.toArray)
 
-let drawScreen (tileSize: int) (screen: Tetris.Screen) =
+let drawScreen (state: Tetris.GameState) =
     svg [ Style [ 
-            Position PositionOptions.Absolute
-            Height (tileSize * screenHeightSteps)
-            Width (tileSize * screenWidthSteps)
-            ] ] 
-        (screen |> Seq.map (fun tile ->
+            Position PositionOptions.Absolute;
+            Height(TileSizePx * state.ScreenHeight)
+            Width(TileSizePx * state.ScreenWidth)
+        ] ] 
+        (state.Screen |> Seq.map (fun tile ->
             match tile.Type with
-            | Filled -> drawTile tile.Position tileSize "yellow" |> Some
-            | Empty -> drawTile tile.Position tileSize "gray" |> Some
+            | Filled -> drawTile tile.Position "yellow" |> Some
+            | Empty -> drawTile tile.Position Styles.ScreenColor |> Some
             ) |> Seq.choose id |> Seq.toArray)
 
 let view (model: Model) dispatch =
-
-  div [ Style [ Position PositionOptions.Relative;]
-        OnKeyDown (fun e -> e.key |> Tetris.keyToGameInput |> KeyPressed |> dispatch) 
+  div [ Style [ Position PositionOptions.Relative; ];
+        OnKeyDown (fun e -> e.key |> keyToGameInput |> KeyPressed |> dispatch) 
        ]
       [ 
-          button [ OnClick (fun _ -> dispatch Rotate) ] [str "Rotate"]
-          drawScreen tileSizePx model.GameState.Screen
-          drawPiece tileSizePx model.GameState.CurrentPiece
+          drawScreen model.GameState
+          drawPiece model.GameState.CurrentPiece
       ] 
 
 let timer () =

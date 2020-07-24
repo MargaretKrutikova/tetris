@@ -10,6 +10,7 @@ open Elmish.React
 open Fable.React
 open Fable.React.Props
 open Browser
+open Tetris.Types
 
 // CONSTANTS
 
@@ -26,6 +27,7 @@ type Model = {
 type Msg =
     | GameLoop
     | GameAction
+    | KeyPressed of Tetris.GameInput 
     | Rotate
 
 let init() : Model * Cmd<Msg>= 
@@ -38,10 +40,16 @@ let update (msg:Msg) (model: Model) =
     | GameLoop -> { model with GameState = Tetris.gameLoop model.GameState }, Cmd.none
     | GameAction -> model, Cmd.none
     | Rotate -> { model with GameState = Tetris.rotateShape model.GameState }, Cmd.none
+    | KeyPressed input -> { model with GameState = Tetris.gameInput input model.GameState }, Cmd.none
+
+let keyboardInputs (dispatch) =
+    document.addEventListener("keydown", fun e -> 
+        let event = e :?> Types.KeyboardEvent
+        event.key |> Tetris.keyToGameInput |> KeyPressed |> dispatch)
 
 // VIEW (rendered with React)
 
-let drawTile ({ Col = col; Row = row }: Tetris.Position) (tileSize: int) (color: string) = 
+let drawTile ({ Col = col; Row = row }: Position) (tileSize: int) (color: string) = 
     let generatePoint (x, y) =
         (x |> string) + ", " + (y |> string)
     
@@ -66,8 +74,8 @@ let drawPiece (tileSize: int) (piece: Tetris.Piece) =
         ] 
         (shape |> Seq.map (fun tile ->
             match tile.Type with
-            | Tetromino.Filled -> drawTile tile.Position tileSize "yellow" |> Some
-            | Tetromino.Empty -> None
+            | Filled -> drawTile tile.Position tileSize "yellow" |> Some
+            | Empty -> None
             ) |> Seq.choose id |> Seq.toArray)
 
 let drawScreen (tileSize: int) (screen: Tetris.Screen) =
@@ -78,20 +86,22 @@ let drawScreen (tileSize: int) (screen: Tetris.Screen) =
             ] ] 
         (screen |> Seq.map (fun tile ->
             match tile.Type with
-            | Tetromino.Filled -> drawTile tile.Position tileSize "yellow" |> Some
-            | Tetromino.Empty -> drawTile tile.Position tileSize "gray" |> Some
+            | Filled -> drawTile tile.Position tileSize "yellow" |> Some
+            | Empty -> drawTile tile.Position tileSize "gray" |> Some
             ) |> Seq.choose id |> Seq.toArray)
 
 let view (model: Model) dispatch =
 
-  div [ Style [ Position PositionOptions.Relative ] ]
+  div [ Style [ Position PositionOptions.Relative;]
+        OnKeyDown (fun e -> e.key |> Tetris.keyToGameInput |> KeyPressed |> dispatch) 
+       ]
       [ 
           button [ OnClick (fun _ -> dispatch Rotate) ] [str "Rotate"]
           drawScreen tileSizePx model.GameState.Screen
           drawPiece tileSizePx model.GameState.CurrentPiece
       ] 
 
-let timer initial =
+let timer () =
     let sub dispatch =
         window.setInterval ((fun _ -> dispatch GameLoop), 300, []) |> ignore
     Cmd.ofSub sub
@@ -99,6 +109,7 @@ let timer initial =
 // App
 Program.mkProgram init update view
 |> Program.withReactSynchronous "elmish-app"
-|> Program.withSubscription timer
+//|> Program.withSubscription timer
+|> Program.withSubscription (fun _ -> [ timer () ; Cmd.ofSub keyboardInputs ] |> Cmd.batch)
 |> Program.withConsoleTrace
 |> Program.run

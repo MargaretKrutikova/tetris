@@ -1,50 +1,19 @@
 module Tetris
 
-open Tetromino
+open Tetris.Types
+open Tetris.Tetromino
 
-let isTileFilled =
-  function
-  | Filled -> true
-  | Empty -> false
+let getRandomShape = generateRandomTetromino >> converTetrominoToShape
 
-type Position = {
-  Row: int
-  Col: int
-}
-
-let positionsEqual (posLeft: Position) (posRight: Position): bool =
-  posLeft.Row = posRight.Row && posLeft.Col = posRight.Col
-
-type Tile = {
-  Type: TileType
-  Position: Position
-}
-
-let makeTile (tileType: TileType) (row: int) (col: int): Tile =
-  { Type = tileType; Position = { Row = row; Col = col } }
+module Constants = 
+  let widthCellsCount = 10
+  let heightCellsCount = 24
 
 type Screen = Tile[]
 
-module Shape =
-  type Shape = Tile[]
-   
-  let rotateClockwise (shape: Shape) =
-    let rows = shape |> Seq.map (fun tile -> tile.Position.Row) |> Seq.max |> (+) 1
-    shape |> Seq.map (fun tile ->
-      let pos = tile.Position
-      makeTile tile.Type (pos.Col) (rows - pos.Row - 1)
-    ) |> Seq.toArray
-
-  let convertToShape (tetromino: Tetromino): Shape =
-    tetromino |> Seq.mapi (fun rowIndex row ->
-      row |> Seq.mapi (fun colIndex value -> makeTile value rowIndex colIndex)) 
-    |> Seq.collect id |> Seq.toArray
-
-let getRandomShape = generateRandomTetromino >> Shape.convertToShape
-
 type Piece = {
   Position: Position
-  Shape: Shape.Shape
+  Shape: Shape
 }
 
 type GameState = {
@@ -53,7 +22,14 @@ type GameState = {
   CurrentPiece: Piece
 }
 
-type GameAction = MoveRight | MoveLeft | Rotate | DoNothing
+type GameInput = Up | Left | Right | NoOp
+
+let keyToGameInput (key: string): GameInput =
+    match key with
+    | "ArrowUp" -> Up
+    | "ArrowLeft" -> Left
+    | "ArrowRight" -> Right
+    | _ -> NoOp
 
 type Dimensions = {
   WidthTiles: int
@@ -77,17 +53,8 @@ let initGameState (dimensions: Dimensions): GameState = {
   CurrentPiece = generateNewPiece dimensions.WidthTiles
 }
   
-let movePositionDown (position: Position): Position =
-  { position with Row = position.Row + 1 }
-  
-let movePositionRight (position: Position): Position =
-  { position with Col = position.Col + 1 }
-
-let movePositionLeft (position: Position): Position =
-  { position with Col = position.Col - 1 }
-
 let rotateShape (gameState: GameState): GameState =
-  let rotatedPiece = { gameState.CurrentPiece with Shape = Shape.rotateClockwise gameState.CurrentPiece.Shape }
+  let rotatedPiece = { gameState.CurrentPiece with Shape = rotateClockwise gameState.CurrentPiece.Shape }
   { gameState with CurrentPiece = rotatedPiece }
 
 let getTileAbsolutePosition (screenPosition: Position) (tile: Tile): Position =
@@ -130,3 +97,19 @@ let gameLoop (gameState: GameState): GameState =
     let currentPiece: Piece = { gameState.CurrentPiece with Position = nextPosition }
     { gameState with CurrentPiece = currentPiece }
 
+
+let gameInput (input: GameInput) (gameState: GameState) : GameState =
+  match input with
+  | Left -> 
+    let piece = { gameState.CurrentPiece with Position = movePositionLeft gameState.CurrentPiece.Position }
+    { gameState with CurrentPiece = piece }
+  | Right -> 
+    let piece = { gameState.CurrentPiece with Position = movePositionRight gameState.CurrentPiece.Position }
+    { gameState with CurrentPiece = piece }
+  | Up -> 
+    let piece = { gameState.CurrentPiece with Shape = rotateClockwise gameState.CurrentPiece.Shape }
+    { gameState with CurrentPiece = piece }
+  | NoOp -> 
+    gameState
+
+   

@@ -1,17 +1,26 @@
-module Tetromino
+module Tetris.Tetromino
+
+open Types
 
 type private TetrominoLetter = I | O | T | S | Z | J | L
 
-type TileType = Empty | Filled
-
 type Tetromino = TileType [][]
+
+let converTetrominoToShape (tetromino: Tetromino): Shape =
+  tetromino 
+  |> Seq.mapi (fun rowIndex row ->
+    row |> Seq.mapi (fun colIndex value -> makeTile value rowIndex colIndex)) 
+  |> Seq.collect id |> Seq.toArray
 
 let private intToTileType =
   function
   | 0 -> Empty
   | _ -> Filled
 
-let private fromTetrominoLetter =
+let private toTetromino (values: int list list): Tetromino =
+    values |> Seq.map (Seq.map (intToTileType) >> Seq.toArray) |> Seq.toArray
+
+let private makeTetrominoFromLetter =
   function
   | I -> 
     [
@@ -51,9 +60,6 @@ let private fromTetrominoLetter =
       [0; 0; 0]
     ]
 
-let private toTetromino (values: int list list): Tetromino =
-    values |> Seq.map (Seq.map (intToTileType) >> Seq.toArray) |> Seq.toArray
-
 let generateRandomTetromino (): Tetromino =
   let r = System.Random()
   match r.Next(7) with 
@@ -65,4 +71,4 @@ let generateRandomTetromino (): Tetromino =
   | 5 -> T
   | 6 -> Z
   | _ -> I
-  |> fromTetrominoLetter |> toTetromino
+  |> makeTetrominoFromLetter |> toTetromino

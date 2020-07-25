@@ -1,10 +1,5 @@
 module App
 
-(**
- The famous Increment/Decrement ported from Elm.
- You can find more info about Elmish architecture and samples at https://elmish.github.io/
-*)
-
 open Elmish
 open Elmish.React
 open Fable.React
@@ -27,7 +22,18 @@ let keyToGameInput (key: string): Tetris.GameInput =
   | "ArrowUp" -> Tetris.Up
   | "ArrowLeft" -> Tetris.Left
   | "ArrowRight" -> Tetris.Right
+  | "ArrowDown" -> Tetris.Down
   | _ -> Tetris.NoOp
+
+let tetrisColorToCss =
+    function
+    | Cyan -> "cyan" 
+    | Blue -> "blue" 
+    | Yellow -> "yellow"
+    | Orange -> "orange" 
+    | Green -> "lawngreen"
+    | Purple -> "purple"
+    | Red -> "red"
 
 // MODEL
 
@@ -37,7 +43,6 @@ type Model = {
 
 type Msg =
     | GameLoop
-    | GameAction
     | KeyPressed of Tetris.GameInput 
 
 let init() : Model * Cmd<Msg>= 
@@ -48,7 +53,6 @@ let init() : Model * Cmd<Msg>=
 let update (msg:Msg) (model: Model) =
     match msg with
     | GameLoop -> { model with GameState = Tetris.gameLoop model.GameState }, Cmd.none
-    | GameAction -> model, Cmd.none
     | KeyPressed input -> { model with GameState = Tetris.gameInput input model.GameState }, Cmd.none
 
 let keyboardInputs (dispatch) =
@@ -81,7 +85,7 @@ let drawPiece (piece: Piece) =
         ] 
         (shape |> Seq.map (fun tile ->
             match tile.Type with
-            | Filled -> drawTile tile.Position "yellow" |> Some
+            | Filled color -> tetrisColorToCss color |> drawTile tile.Position |> Some
             | Empty -> None
             ) |> Seq.choose id |> Seq.toArray)
 
@@ -93,7 +97,7 @@ let drawScreen (state: Tetris.GameState) =
         ] ] 
         (state.Screen |> Seq.map (fun tile ->
             match tile.Type with
-            | Filled -> drawTile tile.Position "yellow" |> Some
+            | Filled color -> tetrisColorToCss color |> drawTile tile.Position |> Some
             | Empty -> drawTile tile.Position Styles.ScreenColor |> Some
             ) |> Seq.choose id |> Seq.toArray)
 

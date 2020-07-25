@@ -1,10 +1,19 @@
 module Tetris.Types
 
-type TileType = Empty | Filled
+type Color = Cyan | Blue | Yellow | Orange | Green | Purple | Red
+
+type TileType = Empty | Filled of Color
+
+type TetrominoLetter = I | O | T | S | Z | J | L
+
+type Tetromino = {
+  Letter: TetrominoLetter
+  Color: Color
+}
 
 let isTileFilled =
   function
-  | Filled -> true
+  | Filled _ -> true
   | Empty -> false
 
 type Position = {
@@ -19,7 +28,10 @@ type Tile = {
 
 type Shape = Tile[]
 
+type PieceState = Falling | Dropped | Landed
+
 type Piece = {
+  State: PieceState
   Position: Position
   Shape: Shape
 }
@@ -62,6 +74,9 @@ module Piece =
 
   let updateShape (shapeFn: Shape -> Shape) (piece: Piece): Piece =
     { piece with Shape = shapeFn piece.Shape }
+
+  let updateState (state: PieceState) (piece: Piece): Piece =
+    { piece with State = state } // TODO: state machine
 
 module Screen =
   type Width = Width of int

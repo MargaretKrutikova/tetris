@@ -2,23 +2,22 @@ module Tetris.Tetromino
 
 open Types
 
-type private TetrominoLetter = I | O | T | S | Z | J | L
+type private InternalTetromino = TileType [][]
 
-type Tetromino = TileType [][]
+let private colorFromTetromino =
+  function
+  | I -> Cyan
+  | J -> Blue
+  | L -> Orange
+  | O -> Yellow
+  | S -> Green
+  | T -> Purple
+  | Z -> Red
 
-let converTetrominoToShape (tetromino: Tetromino): Shape =
-  tetromino 
-  |> Seq.mapi (fun rowIndex row ->
-    row |> Seq.mapi (fun colIndex value -> Tile.make value rowIndex colIndex)) 
-  |> Seq.collect id |> Seq.toArray
-
-let private intToTileType =
+let private intToTileType (color: Color) =
   function
   | 0 -> Empty
-  | _ -> Filled
-
-let private toTetromino (values: int list list): Tetromino =
-    values |> Seq.map (Seq.map (intToTileType) >> Seq.toArray) |> Seq.toArray
+  | _ -> Filled color
 
 let private makeTetrominoFromLetter =
   function
@@ -62,13 +61,29 @@ let private makeTetrominoFromLetter =
 
 let generateRandomTetromino (): Tetromino =
   let r = System.Random()
-  match r.Next(7) with 
-  | 0 -> I
-  | 1 -> J
-  | 2 -> L
-  | 3 -> O
-  | 4 -> S
-  | 5 -> T
-  | 6 -> Z
-  | _ -> I
-  |> makeTetrominoFromLetter |> toTetromino
+  let letter =
+    match r.Next(7) with 
+    | 0 -> I
+    | 1 -> J
+    | 2 -> L
+    | 3 -> O
+    | 4 -> S
+    | 5 -> T
+    | 6 -> Z
+    | _ -> I
+  { Letter = letter; Color = colorFromTetromino letter }
+
+let private converTetrominoToShape (color: Color) (tetromino: InternalTetromino): Shape =
+  tetromino 
+  |> Seq.mapi (fun rowIndex row ->
+    row |> Seq.mapi (fun colIndex value -> Tile.make value rowIndex colIndex)) 
+  |> Seq.collect id |> Seq.toArray
+
+let shapeFromTetromino (tetromino: Tetromino): Shape =
+    let color = tetromino.Color
+
+    tetromino.Letter 
+      |> makeTetrominoFromLetter 
+      |> Seq.map (Seq.map (intToTileType color) >> Seq.toArray)
+      |> Seq.toArray
+      |> converTetrominoToShape color

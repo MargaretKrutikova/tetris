@@ -10,11 +10,15 @@ module Constants =
   [<Literal>]
   let Height = 20
 
+type GameInput = Up | Left | Right | Down | NoOp
+
 type GameState = {
   ScreenWidth: Screen.Width
   ScreenHeight: Screen.Height
   Screen: Screen
   CurrentPiece: Piece
+  GameInput: GameInput
+  LastTimestampMs: float
 }
 
 module Timer =
@@ -37,9 +41,9 @@ let initGameState (): GameState = {
   ScreenHeight = Screen.Height Constants.Height
   Screen = Screen.makeEmptyScreen (Screen.Width Constants.Width) (Screen.Height Constants.Height)
   CurrentPiece = generateNewPiece ()
+  GameInput = NoOp
+  LastTimestampMs = 0.0
 }
-
-type GameInput = Up | Left | Right | Down | NoOp
 
 module Collision =
   let private isPositionOccuped (screen: Screen) (position: Position) =
@@ -77,6 +81,12 @@ let drawPiece (piece: Piece) (screen: Screen): Screen =
        ) 
     |> Seq.toArray
 
+let setGameInput (activated: bool) (input: GameInput) (state: GameState): GameState =
+  if activated then
+    { state with GameInput = input }
+  else 
+    { state with GameInput = NoOp }
+
 let gameInput (input: GameInput) (state: GameState) : GameState =
   match input with
   | Left -> 
@@ -89,13 +99,13 @@ let gameInput (input: GameInput) (state: GameState) : GameState =
     { state with CurrentPiece = state.CurrentPiece |> Piece.updateState Dropped }
   | NoOp -> state
 
-let isLineFilled (line: Tile seq): bool =
+let private isLineFilled (line: Tile seq): bool =
   line |> Seq.forall (fun tile -> isTileFilled tile.Type)
 
-let initEmptyLine (Screen.Width screenWidth) (row: int) : Tile seq =
+let private initEmptyLine (Screen.Width screenWidth) (row: int) : Tile seq =
   Seq.init screenWidth (fun ind -> Tile.make Empty row ind)
 
-let removeFilledRows (Screen.Height height) (width: Screen.Width) (screen: Screen): Screen =
+let private removeFilledRows (Screen.Height height) (width: Screen.Width) (screen: Screen): Screen =
   let notFilledLines =
     screen 
     |> Seq.groupBy (fun tile -> tile.Position.Row)
@@ -116,25 +126,36 @@ let removeFilledRows (Screen.Height height) (width: Screen.Width) (screen: Scree
   else 
     screen
 
-let gameLoop (state: GameState): GameState =
-  // is game over?
-  // has rows to remove
-  match state.CurrentPiece.State with
-  | Falling 
-  | Dropped ->
-    let currentPiece =
-      if hasPieceLanded state.Screen state.CurrentPiece then
-        state.CurrentPiece |> Piece.updateState Landed
-      else 
+let dropTetromino (state: GameState): GameState =
+  let currentPiece =
+    if hasPieceLanded state.Screen state.CurrentPiece then
+      state.CurrentPiece |> Piece.updateState Landed
+    else 
       state.CurrentPiece |> Piece.updatePosition Position.moveDown
 
-    { state with CurrentPiece = currentPiece }
+  { state with CurrentPiece = currentPiece }
 
-  | Landed ->
-    let nextPiece = generateNewPiece ()
-    let screen = 
-      drawPiece state.CurrentPiece state.Screen 
-      |> removeFilledRows state.ScreenHeight state.ScreenWidth
+let landTetromino (state: GameState): GameState =
+  let nextPiece = generateNewPiece ()
+  let screen = 
+    drawPiece state.CurrentPiece state.Screen 
+    |> removeFilledRows state.ScreenHeight state.ScreenWidth
 
-    { state with Screen = screen; CurrentPiece = nextPiece }
+  { state with Screen = screen; CurrentPiece = nextPiece }
+    
+let updateTetromino (state: GameState): GameState =
+  match state.CurrentPiece.State with
+  | Falling 
+  | Dropped -> dropTetromino state
+  | Landed -> landTetromino state
+
+let gameLoop (timestamp: float) (state: GameState): GameState =
+  let currentTimeout = Timer.getTimerMs state
+  let elapsed = timestamp - state.LastTimestampMs
+  
+  if elapsed >= (currentTimeout |> float) then 
+    { state with LastTimestampMs = timestamp } |> updateTetromino
+  else 
+    state
+  
     

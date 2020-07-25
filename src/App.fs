@@ -42,8 +42,9 @@ type Model = {
 }
 
 type Msg =
-    | GameLoop
+    | GameLoop of timestamp: float
     | KeyPressed of Tetris.GameInput 
+    //| KeyUp of Tetris.GameInput 
 
 let init() : Model * Cmd<Msg>= 
     { GameState = Tetris.initGameState () }, Cmd.none // TODO: pass randomly generated shape from command
@@ -52,13 +53,17 @@ let init() : Model * Cmd<Msg>=
 
 let update (msg:Msg) (model: Model) =
     match msg with
-    | GameLoop -> { model with GameState = Tetris.gameLoop model.GameState }, Cmd.none
+    | GameLoop timestamp -> 
+        { model with GameState = Tetris.gameLoop timestamp model.GameState }, Cmd.none
+
     | KeyPressed input -> { model with GameState = Tetris.gameInput input model.GameState }, Cmd.none
 
-let keyboardInputs (dispatch) =
-    document.addEventListener("keydown", fun e -> 
+let keyboardInputs dispatch =
+    let keyFromEvent (e: Types.Event) =
         let event = e :?> Types.KeyboardEvent
-        event.key |> keyToGameInput |> KeyPressed |> dispatch)
+        event.key 
+
+    document.addEventListener("keydown", keyFromEvent >> keyToGameInput >> KeyPressed >> dispatch)
 
 // VIEW 
 
@@ -110,9 +115,13 @@ let view (model: Model) dispatch =
       ] 
 
 let timer () =
-    let sub dispatch =
-        window.setInterval ((fun _ -> dispatch GameLoop), 300, []) |> ignore
-    Cmd.ofSub sub
+    let rec gameLoop dispatch =
+        window.requestAnimationFrame(
+            fun timestamp -> 
+                GameLoop timestamp |> dispatch
+                gameLoop dispatch
+           ) |> ignore
+    Cmd.ofSub gameLoop
 
 // App
 Program.mkProgram init update view

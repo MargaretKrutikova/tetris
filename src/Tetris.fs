@@ -11,8 +11,8 @@ module Constants =
   let Height = 20
 
 type GameState = {
-  ScreenWidth: int
-  ScreenHeight: int
+  ScreenWidth: Screen.Width
+  ScreenHeight: Screen.Height
   Screen: Screen
   CurrentPiece: Piece
 }
@@ -33,8 +33,8 @@ let generateNewPiece () =
   { Position = getShapeInitialPosition shape; Shape = shape; State = Falling }
 
 let initGameState (): GameState = {
-  ScreenWidth = Constants.Width
-  ScreenHeight = Constants.Height
+  ScreenWidth = Screen.Width Constants.Width
+  ScreenHeight = Screen.Height Constants.Height
   Screen = Screen.makeEmptyScreen (Screen.Width Constants.Width) (Screen.Height Constants.Height)
   CurrentPiece = generateNewPiece ()
 }
@@ -89,13 +89,52 @@ let gameInput (input: GameInput) (state: GameState) : GameState =
     { state with CurrentPiece = state.CurrentPiece |> Piece.updateState Dropped }
   | NoOp -> state
 
+let isLineFilled (line: Tile seq): bool =
+  line |> Seq.forall (fun tile -> isTileFilled tile.Type)
+
+let initEmptyLine (Screen.Width screenWidth) (row: int) : Tile seq =
+  Seq.init screenWidth (fun ind -> Tile.make Empty row ind)
+
+let removeFilledRows (Screen.Height height) (width: Screen.Width) (screen: Screen): Screen =
+  let notFilledLines =
+    screen 
+    |> Seq.groupBy (fun tile -> tile.Position.Row)
+    |> Seq.filter (fun (_, line) -> isLineFilled line |> not)
+    |> Seq.map snd
+    |> Seq.toList
+  
+  let linesRemoved = height - (notFilledLines |> Seq.length)
+  let emptyLinesToAdd = Seq.init linesRemoved (initEmptyLine width) |> Seq.toList
+
+  if linesRemoved > 0 then
+    (emptyLinesToAdd @ notFilledLines)
+      |> Seq.mapi (fun rowIndex row -> 
+          row |> Seq.map (fun tile -> { tile with Position = { tile.Position with Row = rowIndex } })
+        )
+     |> Seq.concat
+     |> Seq.toArray
+  else 
+    screen
+
 let gameLoop (state: GameState): GameState =
   // is game over?
   // has rows to remove
-  if hasPieceLanded state.Screen state.CurrentPiece then
-    let nextPiece = generateNewPiece ()
-    let screen = drawPiece state.CurrentPiece state.Screen
-    { state with Screen = screen; CurrentPiece = nextPiece }
-  else 
-    let currentPiece = state.CurrentPiece |> Piece.updatePosition Position.moveDown
+  match state.CurrentPiece.State with
+  | Falling 
+  | Dropped ->
+    let currentPiece =
+      if hasPieceLanded state.Screen state.CurrentPiece then
+        state.CurrentPiece |> Piece.updateState Landed
+      else 
+      state.CurrentPiece |> Piece.updatePosition Position.moveDown
+
     { state with CurrentPiece = currentPiece }
+
+  | Landed ->
+    let nextPiece = generateNewPiece ()
+    let screen = 
+      drawPiece state.CurrentPiece state.Screen 
+      |> removeFilledRows state.ScreenHeight state.ScreenWidth
+
+    { state with Screen = screen; CurrentPiece = nextPiece }
+    

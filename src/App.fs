@@ -90,10 +90,11 @@ let drawPiece (piece: Piece) =
             ) |> Seq.choose id |> Seq.toArray)
 
 let drawScreen (state: Tetris.GameState) =
+    let (Screen.Height height, Screen.Width width) = (state.ScreenHeight, state.ScreenWidth) 
     svg [ Style [ 
             Position PositionOptions.Absolute;
-            Height(TileSizePx * state.ScreenHeight)
-            Width(TileSizePx * state.ScreenWidth)
+            Height(TileSizePx * height)
+            Width(TileSizePx * width)
         ] ] 
         (state.Screen |> Seq.map (fun tile ->
             match tile.Type with

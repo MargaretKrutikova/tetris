@@ -31,10 +31,18 @@ module Timer =
 let getShapeInitialPosition (shape: Shape): Position =
   { Row = 0; Col = (Constants.Width - Shape.getWidth shape) /2 }
 
+let newPieceFromTetramino (tetromino: Tetromino): Piece =
+  let shape = tetromino |> shapeFromTetromino
+  { 
+    ScreenPosition = getShapeInitialPosition shape
+    Shape = shape 
+    Color = tetromino.Color
+    State = Falling 
+  }
+
 let generateNewPiece () =
   let tetromino = generateRandomTetromino () 
-  let shape = tetromino |> shapeFromTetromino
-  { Position = getShapeInitialPosition shape; Shape = shape; State = Falling }
+  newPieceFromTetramino tetromino
 
 let initGameState (): GameState = {
   ScreenWidth = Screen.Width Constants.Width
@@ -54,8 +62,7 @@ module Collision =
 
   let hasCollisions (screen: Screen) (piece: Piece) =
     piece.Shape 
-      |> Seq.filter (fun value -> isTileFilled value.Type)
-      |> Seq.map (Screen.getTileAbsolutePosition piece.Position)
+      |> Seq.map (Screen.getAbsolutePosition piece.ScreenPosition)
       |> Seq.exists (isPositionOccuped screen)
 
 let updatePieceIfNoCollision (gameState: GameState) (piece: Piece) =
@@ -68,24 +75,16 @@ let hasPieceLanded (screen: Screen) (piece: Piece) =
   piece |> Piece.updatePosition Position.moveDown |> Collision.hasCollisions screen
 
 let drawPiece (piece: Piece) (screen: Screen): Screen =
-  let findTileToFill (position) = 
-      piece.Shape |> Seq.tryFind (
-          fun tile -> tile |> Screen.getTileAbsolutePosition piece.Position |> Position.areEqual position)
-      |> Option.map (fun tile -> tile.Type)
+  let getPieceTileType (screenPosition: Position) = 
+      piece.Shape 
+        |> Seq.map (Screen.getAbsolutePosition piece.ScreenPosition)
+        |> Seq.tryFind (Position.areEqual screenPosition)
+        |> Option.map (fun _ -> Filled piece.Color)
 
-  screen 
-    |> Seq.map (fun tile -> 
-       match findTileToFill tile.Position with
-       | Some (Filled color) -> { tile with Type = Filled color }
-       | Some Empty | None -> tile
-       ) 
-    |> Seq.toArray
+  let updateScreenTileType (screenTile: Tile): Tile =
+    { screenTile with Type = getPieceTileType screenTile.Position |> Option.defaultValue screenTile.Type }
 
-let setGameInput (activated: bool) (input: GameInput) (state: GameState): GameState =
-  if activated then
-    { state with GameInput = input }
-  else 
-    { state with GameInput = NoOp }
+  screen |> Seq.map (updateScreenTileType) |> Seq.toArray
 
 let gameInput (input: GameInput) (state: GameState) : GameState =
   match input with

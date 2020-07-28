@@ -67,7 +67,7 @@ let keyboardInputs dispatch =
 
 // VIEW 
 
-let drawTile ({ Col = col; Row = row }: Position) (color: string) = 
+let drawTile (color: string) ({ Col = col; Row = row }: Position) = 
     rect [ 
         SVGAttr.Stroke("black")
         SVGAttr.Fill(color)
@@ -78,8 +78,8 @@ let drawTile ({ Col = col; Row = row }: Position) (color: string) =
       ] []
 
 let drawPiece (piece: Piece) =
-    let shape = piece.Shape
-    let position = piece.Position
+    let position = piece.ScreenPosition
+    let pieceColor = tetrisColorToCss piece.Color
 
     svg [
           Style [ 
@@ -88,11 +88,14 @@ let drawPiece (piece: Piece) =
             Top (position.Row * TileSizePx)
            ] 
         ] 
-        (shape |> Seq.map (fun tile ->
-            match tile.Type with
-            | Filled color -> tetrisColorToCss color |> drawTile tile.Position |> Some
-            | Empty -> None
-            ) |> Seq.choose id |> Seq.toArray)
+        (piece.Shape |> Seq.map (drawTile pieceColor) |> Seq.toArray)
+
+let drawScreenTile (screenTile: Tile) =
+    let color = 
+        match screenTile.Type with
+        | Filled color -> tetrisColorToCss color 
+        | Empty -> Styles.ScreenColor
+    drawTile color screenTile.Position 
 
 let drawScreen (state: Tetris.GameState) =
     let (Screen.Height height, Screen.Width width) = (state.ScreenHeight, state.ScreenWidth) 
@@ -101,11 +104,7 @@ let drawScreen (state: Tetris.GameState) =
             Height(TileSizePx * height)
             Width(TileSizePx * width)
         ] ] 
-        (state.Screen |> Seq.map (fun tile ->
-            match tile.Type with
-            | Filled color -> tetrisColorToCss color |> drawTile tile.Position |> Some
-            | Empty -> drawTile tile.Position Styles.ScreenColor |> Some
-            ) |> Seq.choose id |> Seq.toArray)
+        (state.Screen |> Seq.map drawScreenTile |> Seq.toArray)
 
 let view (model: Model) dispatch =
   div [ Style [ Position PositionOptions.Relative; ] ]
@@ -126,7 +125,6 @@ let timer () =
 // App
 Program.mkProgram init update view
 |> Program.withReactSynchronous "elmish-app"
-//|> Program.withSubscription timer
 |> Program.withSubscription (fun _ -> [ timer () ; Cmd.ofSub keyboardInputs ] |> Cmd.batch)
 |> Program.withConsoleTrace
 |> Program.run

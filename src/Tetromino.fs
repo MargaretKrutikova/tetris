@@ -2,7 +2,7 @@ module Tetris.Tetromino
 
 open Types
 
-type private InternalTetromino = TileType [][]
+type private InternalTetromino = int list list
 
 let private colorFromTetromino =
   function
@@ -14,10 +14,10 @@ let private colorFromTetromino =
   | T -> Purple
   | Z -> Red
 
-let private intToTileType (color: Color) =
+let private isFilled =  
   function
-  | 0 -> Empty
-  | _ -> Filled color
+    | 0 -> false
+    | _ -> true
 
 let private makeTetrominoFromLetter =
   function
@@ -73,17 +73,14 @@ let generateRandomTetromino (): Tetromino =
     | _ -> I
   { Letter = letter; Color = colorFromTetromino letter }
 
-let private converTetrominoToShape (color: Color) (tetromino: InternalTetromino): Shape =
+let private converTetrominoToShape (tetromino: InternalTetromino): Shape =
   tetromino 
   |> Seq.mapi (fun rowIndex row ->
-    row |> Seq.mapi (fun colIndex value -> Tile.make value rowIndex colIndex)) 
+    row |> Seq.filter isFilled 
+        |> Seq.mapi (fun colIndex _ -> { Row = rowIndex; Col = colIndex })) 
   |> Seq.collect id |> Seq.toArray
 
 let shapeFromTetromino (tetromino: Tetromino): Shape =
-    let color = tetromino.Color
-
     tetromino.Letter 
       |> makeTetrominoFromLetter 
-      |> Seq.map (Seq.map (intToTileType color) >> Seq.toArray)
-      |> Seq.toArray
-      |> converTetrominoToShape color
+      |> converTetrominoToShape 

@@ -11,29 +11,30 @@ type Tetromino = {
   Color: Color
 }
 
-let isTileFilled =
-  function
-  | Filled _ -> true
-  | Empty -> false
-
 type Position = {
   Row: int
   Col: int
 }
 
-type Tile = {
-  Type: TileType
-  Position: Position
-}
-
-type Shape = Tile[]
+type Shape = Position[]
 
 type PieceState = Falling | Dropped | Landed
 
 type Piece = {
   State: PieceState
-  Position: Position
+  ScreenPosition: Position
   Shape: Shape
+  Color: Color
+}
+
+let isTileFilled =
+  function
+  | Filled _ -> true
+  | Empty -> false
+
+type Tile = {
+  Type: TileType
+  Position: Position
 }
 
 type Screen = Tile[]
@@ -60,17 +61,17 @@ module Shape =
     { Row = position.Col; Col = rowsCount - position.Row - 1 }
 
   let rotateClockwise (shape: Shape) =
-    let rowsCount = shape |> Seq.map (fun tile -> tile.Position.Row) |> Seq.max |> (+) 1
+    let rowsCount = shape |> Seq.map (fun tile -> tile.Row) |> Seq.max |> (+) 1
     shape 
-    |> Seq.map (fun tile -> { tile with Position = rotatePositionClockwise rowsCount tile.Position }) 
+    |> Seq.map (rotatePositionClockwise rowsCount) 
     |> Seq.toArray
 
   let getWidth (shape: Shape) =
-    shape |> Seq.map (fun tile -> tile.Position.Col) |> Seq.max |> (+) 1
+    shape |> Seq.map (fun tile -> tile.Col) |> Seq.max |> (+) 1
 
 module Piece =
   let updatePosition (positionFn: Position -> Position) (piece: Piece): Piece =
-    { piece with Position = positionFn piece.Position }
+    { piece with ScreenPosition = positionFn piece.ScreenPosition }
 
   let updateShape (shapeFn: Shape -> Shape) (piece: Piece): Piece =
     { piece with Shape = shapeFn piece.Shape }
@@ -82,8 +83,8 @@ module Screen =
   type Width = Width of int
   type Height = Height of int
 
-  let getTileAbsolutePosition (screenPosition: Position) (tile: Tile): Position =
-      { Row = tile.Position.Row + screenPosition.Row; Col = tile.Position.Col + screenPosition.Col}
+  let getAbsolutePosition (screenPosition: Position) (relativePosition: Position): Position =
+      { Row = relativePosition.Row + screenPosition.Row; Col = relativePosition.Col + screenPosition.Col}
 
   let makeEmptyScreen (Width width) (Height height) : Screen =
     Array.init height (fun rowIndex -> 

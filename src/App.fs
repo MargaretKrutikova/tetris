@@ -44,7 +44,6 @@ type Model = {
 type Msg =
     | GameLoop of timestamp: float
     | KeyPressed of Tetris.GameInput 
-    //| KeyUp of Tetris.GameInput 
 
 let init() : Model * Cmd<Msg>= 
     { GameState = Tetris.initGameState () }, Cmd.none // TODO: pass randomly generated shape from command

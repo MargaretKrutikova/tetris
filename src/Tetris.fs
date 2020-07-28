@@ -10,6 +10,9 @@ module Constants =
   [<Literal>]
   let Height = 20
 
+  [<Literal>]
+  let DroppedFramesNumber = 5 
+
 type GameInput = Up | Left | Right | Down | NoOp
 
 type GameState = {
@@ -24,8 +27,8 @@ type GameState = {
 module Timer =
   let getTimerMs (state: GameState) =
     match state.CurrentPiece.State with
-    | Falling -> 400
-    | Dropped -> 50
+    | Falling -> 700
+    | Dropped _ -> 60
     | Landed -> 100
 
 let getShapeInitialPosition (shape: Shape): Position =
@@ -42,7 +45,6 @@ let newPieceFromTetramino (tetromino: Tetromino): Piece =
 
 let generateNewPiece () =
   let tetromino = generateRandomTetromino () 
-  Browser.Dom.console.log (sprintf "%A" tetromino)
   newPieceFromTetramino tetromino
 
 let initGameState (): GameState = {
@@ -98,7 +100,7 @@ let gameInput (input: GameInput) (state: GameState) : GameState =
   | Up -> 
     state.CurrentPiece |> Piece.updateShape Shape.rotateClockwise |> updatePieceIfNoCollision state
   | Down -> 
-    { state with CurrentPiece = state.CurrentPiece |> Piece.updateState Dropped }
+    { state with CurrentPiece = state.CurrentPiece |> Piece.updateState (Dropped Constants.DroppedFramesNumber) }
   | NoOp -> state
 
 let dropTetromino (state: GameState): GameState =
@@ -106,7 +108,14 @@ let dropTetromino (state: GameState): GameState =
     if hasPieceLanded state.Screen state.CurrentPiece then
       state.CurrentPiece |> Piece.updateState Landed
     else 
-      state.CurrentPiece |> Piece.updatePosition Position.moveDown
+      let nextPieceState = 
+        match state.CurrentPiece.State with
+        | Landed -> Landed
+        | Falling -> Falling
+        | Dropped frames when frames > 0 -> Dropped (frames - 1)
+        | Dropped _ -> Falling
+
+      state.CurrentPiece |> Piece.updatePosition Position.moveDown |> Piece.updateState nextPieceState
 
   { state with CurrentPiece = currentPiece }
 
@@ -121,7 +130,7 @@ let landTetromino (state: GameState): GameState =
 let updateTetromino (state: GameState): GameState =
   match state.CurrentPiece.State with
   | Falling 
-  | Dropped -> dropTetromino state
+  | Dropped _ -> dropTetromino state
   | Landed -> landTetromino state
 
 let gameLoop (timestamp: float) (state: GameState): GameState =

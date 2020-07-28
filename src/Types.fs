@@ -18,7 +18,7 @@ type Position = {
 
 type Shape = Position[]
 
-type PieceState = Falling | Dropped | Landed
+type PieceState = Falling | Dropped of framesLeft: int | Landed
 
 type Piece = {
   State: PieceState

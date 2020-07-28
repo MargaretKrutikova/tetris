@@ -14,20 +14,19 @@ type GameInput = Up | Left | Right | Down | NoOp
 
 type Acceleration = Zero | Accelerated
 
-type GameStatus = Playing | GameOver
-
 type GameState = {
-  ScreenWidth: Screen.Width
-  ScreenHeight: Screen.Height
   Screen: Screen
   CurrentPiece: Piece
   Acceleration: Acceleration
-  GameInput: GameInput
   LastTimestampMs: float
   LinesRemoved: int
-  GameStatus: GameStatus
   NextPiece: Tetromino
 }
+
+type GameStatus = 
+  | NotStarted 
+  | Playing of GameState
+  | GameOver of GameState
 
 module Timer =
   let getTimerMs (state: GameState) =
@@ -46,34 +45,30 @@ let newPieceFromTetromino (tetromino: Tetromino): Piece =
     Color = tetromino.Color
   }
 
-let generateNewPiece () =
-  let tetromino = generateRandomTetromino () 
-  newPieceFromTetromino tetromino
-
-let initGameState (): GameState = {
-  ScreenWidth = Screen.Width Constants.Width
-  ScreenHeight = Screen.Height Constants.Height
+let initGameState (currentTetromino, nextTetromino): GameState = {
   Screen = Screen.makeEmptyScreen (Screen.Width Constants.Width) (Screen.Height Constants.Height)
-  CurrentPiece = generateNewPiece ()
-  GameInput = NoOp
+  CurrentPiece = currentTetromino |> newPieceFromTetromino
   LastTimestampMs = 0.0
   Acceleration = Zero
   LinesRemoved = 0
-  GameStatus = Playing
-  NextPiece = generateRandomTetromino () 
+  NextPiece = nextTetromino
 }
 
 module Effects =
   type Cmd =
     | SpawnTetromino
+    | InitGame
 
   type Msg = 
     | SpawnedTetromino of Tetromino
+    | InitGameDone of pair: (Tetromino * Tetromino)
   
   let mapEffect (effectCmd: Cmd) (dispatch: Msg -> unit) =
     match effectCmd with
     | SpawnTetromino ->
       generateRandomTetromino () |> SpawnedTetromino |> dispatch
+    | InitGame ->
+      (generateRandomTetromino (), generateRandomTetromino ()) |> InitGameDone |> dispatch
 
 module Collision =
   let private isPositionOccuped (screen: Screen) (position: Position) =
@@ -110,7 +105,7 @@ let drawPiece (piece: Piece) (screen: Screen): Screen =
 
   screen |> Seq.map (Seq.map updateScreenTileType >> Seq.toList) |> Seq.toList
 
-let keyDown (input: GameInput) (state: GameState) : GameState =
+let private processKeyDown (input: GameInput) (state: GameState) : GameState =
   match input with
   | Left -> 
     state.CurrentPiece |> Piece.updatePosition Position.moveLeft |> updatePieceIfNoCollision state
@@ -121,42 +116,38 @@ let keyDown (input: GameInput) (state: GameState) : GameState =
   | Down -> { state with Acceleration = Accelerated }
   | NoOp -> state
 
-let keyUp (input: GameInput) (state: GameState) : GameState =
-  match input with
-  | Down -> { state with Acceleration = Zero }
-  | _ -> state
+let keyDown (input: GameInput) (status: GameStatus) : GameStatus =
+  match status with
+  | Playing state -> processKeyDown input state |> Playing
+  | _ -> status
 
-let updateGameStatus (state: GameState): GameState =
-  let status = 
-    if Collision.hasCollisions state.Screen state.CurrentPiece then
-      GameOver
-    else 
-      Playing
-  { state with GameStatus = status }
+let keyUp (input: GameInput) (status: GameStatus) : GameStatus =
+  match status with
+  | Playing state ->
+    match input with
+    | Down -> { state with Acceleration = Zero }
+    | _ -> state
+    |> Playing
+  | _ -> status
 
-let copyNextPieceToCurrent (randomTetromino: Tetromino) (state: GameState): GameState =
+let private copyNextPieceToCurrent (randomTetromino: Tetromino) (state: GameState): GameState =
   { state with CurrentPiece = newPieceFromTetromino state.NextPiece; NextPiece = randomTetromino }
 
-let landTetromino (state: GameState): GameState =
+let private landTetromino (state: GameState): GameState =
   let (linesRemoved, screen) = 
     state.Screen 
     |> drawPiece state.CurrentPiece 
-    |> Screen.removeFilledLines state.ScreenWidth
+    |> Screen.removeFilledLines (Screen.Width Constants.Width)
 
   { state with Screen = screen }
     
-let updateTetromino (state: GameState): (GameState * Effects.Cmd option) =
+let private updateTetromino (state: GameState): (GameState * Effects.Cmd option) =
   if hasPieceLanded state.Screen state.CurrentPiece then
-    let newState = state |> landTetromino
-    let cmd =
-      match newState.GameStatus with
-      | Playing -> Effects.SpawnTetromino |> Some
-      | GameOver -> None
-    (newState, cmd)
+    (state |> landTetromino, Effects.SpawnTetromino |> Some)
   else 
     { state with CurrentPiece = state.CurrentPiece |> Piece.updatePosition Position.moveDown }, None
 
-let gameLoop (timestamp: float) (state: GameState): (GameState * Effects.Cmd option) =
+let private updateGameState (timestamp: float) (state: GameState): (GameState * Effects.Cmd option) =
   let currentTimeout = Timer.getTimerMs state
   let elapsed = timestamp - state.LastTimestampMs
   
@@ -165,7 +156,26 @@ let gameLoop (timestamp: float) (state: GameState): (GameState * Effects.Cmd opt
   else 
     state, None
 
-let processEffects (effect: Effects.Msg) (state: GameState): (GameState * Effects.Cmd option) =
-  match effect with
-  | Effects.SpawnedTetromino tetromino ->
-    copyNextPieceToCurrent tetromino state, None
+let gameLoop (timestamp: float) (status: GameStatus): (GameStatus * Effects.Cmd option) =
+  match status with
+  | Playing state ->
+    let gameState, effect = updateGameState timestamp state
+    Playing gameState, effect
+  | _ -> status, None
+
+let startGame () =
+  NotStarted, Effects.InitGame |> Some
+
+let checkEndGame (gameState: GameState) =
+  if Collision.hasCollisions gameState.Screen gameState.CurrentPiece then
+      GameOver gameState
+  else 
+    Playing gameState
+
+let processEffects (effect: Effects.Msg) (status: GameStatus): (GameStatus * Effects.Cmd option) =
+  match status, effect with
+  | Playing state, Effects.SpawnedTetromino tetromino ->
+    copyNextPieceToCurrent tetromino state |> checkEndGame, None
+  | NotStarted, Effects.InitGameDone pair -> 
+    initGameState pair |> Playing, None
+  | _ -> status, None

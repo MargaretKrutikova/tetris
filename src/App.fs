@@ -38,7 +38,7 @@ let tetrisColorToCss =
 // MODEL
 
 type Model = {
-    GameState: Tetris.GameState
+    GameStatus: Tetris.GameStatus
 }
 
 type Msg =
@@ -46,9 +46,10 @@ type Msg =
     | GameMessage of Tetris.Effects.Msg
     | KeyDown of Tetris.GameInput 
     | KeyUp of Tetris.GameInput
+    | StartGame
 
 let init() : Model * Cmd<Msg>= 
-    { GameState = Tetris.initGameState () }, Cmd.none // TODO: pass randomly generated shape from command
+    { GameStatus = Tetris.NotStarted }, Cmd.none 
 
 // UPDATE
 
@@ -63,15 +64,18 @@ let fromGameEffect (gameEffect: Tetris.Effects.Cmd option): Msg Cmd =
 let update (msg:Msg) (model: Model) =
     match msg with
     | GameLoop timestamp -> 
-        let gameState, gameEffect = Tetris.gameLoop timestamp model.GameState
-        { model with GameState = gameState }, fromGameEffect gameEffect
+        let gameStatus, gameEffect = Tetris.gameLoop timestamp model.GameStatus
+        { model with GameStatus = gameStatus }, fromGameEffect gameEffect
 
     | GameMessage gameMsg -> 
-        let gameState, gameEffect = Tetris.processEffects gameMsg model.GameState
-        { model with GameState = gameState }, fromGameEffect gameEffect
+        let gameStatus, gameEffect = Tetris.processEffects gameMsg model.GameStatus
+        { model with GameStatus = gameStatus }, fromGameEffect gameEffect
 
-    | KeyDown input -> { model with GameState = Tetris.keyDown input model.GameState }, Cmd.none
-    | KeyUp input -> { model with GameState = Tetris.keyUp input model.GameState }, Cmd.none
+    | KeyDown input -> { model with GameStatus = Tetris.keyDown input model.GameStatus }, Cmd.none
+    | KeyUp input -> { model with GameStatus = Tetris.keyUp input model.GameStatus }, Cmd.none
+    | StartGame -> 
+        let gameStatus, gameEffect = Tetris.startGame ()
+        { model with GameStatus = gameStatus }, fromGameEffect gameEffect
 
 let keyboardInputs dispatch =
     let keyFromEvent (e: Types.Event) =
@@ -114,11 +118,10 @@ let drawScreenTile (screenTile: Tile) =
     drawTile color screenTile.Position 
 
 let drawScreen (state: Tetris.GameState) =
-    let (Screen.Height height, Screen.Width width) = (state.ScreenHeight, state.ScreenWidth) 
     svg [ Style [ 
             Position PositionOptions.Absolute;
-            Height(TileSizePx * height)
-            Width(TileSizePx * width)
+            Height(TileSizePx * Tetris.Constants.Height)
+            Width(TileSizePx * Tetris.Constants.Width)
         ] ] 
         (state.Screen |> Seq.collect (Seq.map drawScreenTile) |> Seq.toArray)
 
@@ -129,17 +132,27 @@ let nextTetromino (tetromino: Tetromino) =
     svg [ Style []] 
       (shape |> Seq.map (drawTile color) |> Seq.toArray)
 
-let view (model: Model) dispatch =
+let gameView (gameState: Tetris.GameState) =
   div [ Style [ Display DisplayOptions.Flex ] ] [
     div [ Style [ Position PositionOptions.Relative; ] ]
           [ 
-              drawScreen model.GameState
-              drawPiece model.GameState.CurrentPiece
+              drawScreen gameState
+              drawPiece gameState.CurrentPiece
           ] 
     div [] [
         h3 [ Style [MarginBottom "30px"] ] [str "Next tetromino:"]
-        nextTetromino model.GameState.NextPiece]
+        nextTetromino gameState.NextPiece]
   ]
+
+let view (model: Model) dispatch =
+    div [] [
+        button [ OnClick (fun _ -> dispatch StartGame) ] [str "Start"]
+        // span [] [sprintf "%A" model |> str]
+        match model.GameStatus with
+        | Tetris.NotStarted -> div [] [str "Not Started"] // TODO: draw empty screen 
+        | Tetris.Playing state -> gameView state
+        | Tetris.GameOver state -> gameView state
+    ]
 
 let timer () =
     let rec gameLoop dispatch =

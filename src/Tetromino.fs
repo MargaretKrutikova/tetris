@@ -29,8 +29,8 @@ let private makeTetrominoFromLetter =
       [0; 0; 0; 0];
     ] 
   | J -> [
-      [1; 1; 0];
-      [0; 1; 1];
+      [1; 1; 1];
+      [0; 0; 1];
       [0; 0; 0];
     ]
   | L -> [

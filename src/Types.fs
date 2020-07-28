@@ -18,10 +18,7 @@ type Position = {
 
 type Shape = Position[]
 
-type PieceState = Falling | Landed
-
 type Piece = {
-  State: PieceState
   ScreenPosition: Position
   Shape: Shape
   Color: Color
@@ -75,9 +72,6 @@ module Piece =
 
   let updateShape (shapeFn: Shape -> Shape) (piece: Piece): Piece =
     { piece with Shape = shapeFn piece.Shape }
-
-  let updateState (state: PieceState) (piece: Piece): Piece =
-    { piece with State = state } // TODO: state machine
 
 module Screen =
   type Width = Width of int

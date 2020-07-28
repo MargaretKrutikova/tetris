@@ -43,6 +43,7 @@ type Model = {
 
 type Msg =
     | GameLoop of timestamp: float
+    | GameMessage of Tetris.Effects.Msg
     | KeyDown of Tetris.GameInput 
     | KeyUp of Tetris.GameInput
 
@@ -51,10 +52,24 @@ let init() : Model * Cmd<Msg>=
 
 // UPDATE
 
+let fromGameEffect (gameEffect: Tetris.Effects.Cmd option): Msg Cmd =
+    match gameEffect with
+    | Some effect -> 
+        Cmd.ofSub (fun (dispatch: Msg -> unit) -> 
+            Tetris.Effects.mapEffect effect (GameMessage >> dispatch)
+        )
+    | None -> Cmd.none
+
 let update (msg:Msg) (model: Model) =
     match msg with
     | GameLoop timestamp -> 
-        { model with GameState = Tetris.gameLoop timestamp model.GameState }, Cmd.none
+        let gameState, gameEffect = Tetris.gameLoop timestamp model.GameState
+        { model with GameState = gameState }, fromGameEffect gameEffect
+
+    | GameMessage gameMsg -> 
+        let gameState, gameEffect = Tetris.processEffects gameMsg model.GameState
+        { model with GameState = gameState }, fromGameEffect gameEffect
+
     | KeyDown input -> { model with GameState = Tetris.keyDown input model.GameState }, Cmd.none
     | KeyUp input -> { model with GameState = Tetris.keyUp input model.GameState }, Cmd.none
 

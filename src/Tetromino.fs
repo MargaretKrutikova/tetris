@@ -73,12 +73,22 @@ let generateRandomTetromino (): Tetromino =
     | _ -> I
   { Letter = letter; Color = colorFromTetromino letter }
 
+let private mapTetrominoRow (rowIndex: int) (row: int list) =
+  row 
+  |> Seq.mapi (fun colIndex value -> 
+      if isFilled value then
+        { Row = rowIndex; Col = colIndex } |> Some
+      else 
+        None
+  ) 
+  |> Seq.choose id 
+  |> Seq.toList
+
 let private converTetrominoToShape (tetromino: InternalTetromino): Shape =
   tetromino 
-  |> Seq.mapi (fun rowIndex row ->
-    row |> Seq.filter isFilled 
-        |> Seq.mapi (fun colIndex _ -> { Row = rowIndex; Col = colIndex })) 
-  |> Seq.collect id |> Seq.toArray
+    |> Seq.mapi mapTetrominoRow
+    |> Seq.collect id 
+    |> Seq.toArray
 
 let shapeFromTetromino (tetromino: Tetromino): Shape =
     tetromino.Letter 

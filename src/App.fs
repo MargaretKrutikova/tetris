@@ -11,7 +11,7 @@ open Tetris.Types
 
 module Styles =
     [<Literal>]
-    let ScreenColor = "gray"
+    let ScreenColor = "lightgray"
 
 
 [<Literal>]
@@ -43,7 +43,8 @@ type Model = {
 
 type Msg =
     | GameLoop of timestamp: float
-    | KeyPressed of Tetris.GameInput 
+    | KeyDown of Tetris.GameInput 
+    | KeyUp of Tetris.GameInput
 
 let init() : Model * Cmd<Msg>= 
     { GameState = Tetris.initGameState () }, Cmd.none // TODO: pass randomly generated shape from command
@@ -54,15 +55,16 @@ let update (msg:Msg) (model: Model) =
     match msg with
     | GameLoop timestamp -> 
         { model with GameState = Tetris.gameLoop timestamp model.GameState }, Cmd.none
-
-    | KeyPressed input -> { model with GameState = Tetris.gameInput input model.GameState }, Cmd.none
+    | KeyDown input -> { model with GameState = Tetris.keyDown input model.GameState }, Cmd.none
+    | KeyUp input -> { model with GameState = Tetris.keyUp input model.GameState }, Cmd.none
 
 let keyboardInputs dispatch =
     let keyFromEvent (e: Types.Event) =
         let event = e :?> Types.KeyboardEvent
         event.key 
 
-    document.addEventListener("keydown", keyFromEvent >> keyToGameInput >> KeyPressed >> dispatch)
+    document.addEventListener("keydown", keyFromEvent >> keyToGameInput >> KeyDown >> dispatch)
+    document.addEventListener("keyup", keyFromEvent >> keyToGameInput >> KeyUp >> dispatch)
 
 // VIEW 
 

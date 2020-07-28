@@ -10,12 +10,9 @@ module Constants =
   [<Literal>]
   let Height = 20
 
-  [<Literal>]
-  let AccelerationFramesNumber = 3
-
 type GameInput = Up | Left | Right | Down | NoOp
 
-type Acceleration = None | Accelerated of framesLeft: int
+type Acceleration = None | Accelerated
 
 type GameState = {
   ScreenWidth: Screen.Width
@@ -31,7 +28,7 @@ module Timer =
   let getTimerMs (state: GameState) =
     match state.Acceleration, state.CurrentPiece.State with
     | _, Landed -> 300
-    | Accelerated _, _ -> 60
+    | Accelerated, _ -> 60
     | _, Falling -> 700 
 
 let getShapeInitialPosition (shape: Shape): Position =
@@ -95,7 +92,7 @@ let drawPiece (piece: Piece) (screen: Screen): Screen =
 
   screen |> Seq.map (Seq.map updateScreenTileType >> Seq.toList) |> Seq.toList
 
-let gameInput (input: GameInput) (state: GameState) : GameState =
+let keyDown (input: GameInput) (state: GameState) : GameState =
   match input with
   | Left -> 
     state.CurrentPiece |> Piece.updatePosition Position.moveLeft |> updatePieceIfNoCollision state
@@ -103,9 +100,13 @@ let gameInput (input: GameInput) (state: GameState) : GameState =
     state.CurrentPiece |> Piece.updatePosition Position.moveRight |> updatePieceIfNoCollision state
   | Up -> 
     state.CurrentPiece |> Piece.updateShape Shape.rotateClockwise |> updatePieceIfNoCollision state
-  | Down -> 
-    { state with Acceleration = Accelerated Constants.AccelerationFramesNumber }
+  | Down -> { state with Acceleration = Accelerated }
   | NoOp -> state
+
+let keyUp (input: GameInput) (state: GameState) : GameState =
+  match input with
+  | Down -> { state with Acceleration = None }
+  | _ -> state
 
 let dropTetromino (state: GameState): GameState =
   let currentPiece =
@@ -129,22 +130,12 @@ let updateTetromino (state: GameState): GameState =
   | Falling -> dropTetromino state
   | Landed -> landTetromino state
 
-let updateAcceleration (state: GameState): GameState =
-  let acceleration =
-    match state.Acceleration with
-    | Accelerated frames when frames > 0 -> Accelerated (frames - 1)
-    | Accelerated _ -> None
-    | None -> None
-
-  { state with Acceleration = acceleration }
 
 let gameLoop (timestamp: float) (state: GameState): GameState =
   let currentTimeout = Timer.getTimerMs state
   let elapsed = timestamp - state.LastTimestampMs
   
   if elapsed >= (currentTimeout |> float) then 
-    { state with LastTimestampMs = timestamp } 
-      |> updateTetromino 
-      |> updateAcceleration
+    { state with LastTimestampMs = timestamp } |> updateTetromino 
   else 
     state

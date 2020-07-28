@@ -11,25 +11,28 @@ module Constants =
   let Height = 20
 
   [<Literal>]
-  let DroppedFramesNumber = 5 
+  let AccelerationFramesNumber = 3
 
 type GameInput = Up | Left | Right | Down | NoOp
+
+type Acceleration = None | Accelerated of framesLeft: int
 
 type GameState = {
   ScreenWidth: Screen.Width
   ScreenHeight: Screen.Height
   Screen: Screen
   CurrentPiece: Piece
+  Acceleration: Acceleration
   GameInput: GameInput
   LastTimestampMs: float
 }
 
 module Timer =
   let getTimerMs (state: GameState) =
-    match state.CurrentPiece.State with
-    | Falling -> 700
-    | Dropped _ -> 60
-    | Landed -> 100
+    match state.Acceleration, state.CurrentPiece.State with
+    | _, Landed -> 300
+    | Accelerated _, _ -> 60
+    | _, Falling -> 700 
 
 let getShapeInitialPosition (shape: Shape): Position =
   { Row = 0; Col = (Constants.Width - Shape.getWidth shape) /2 }
@@ -54,6 +57,7 @@ let initGameState (): GameState = {
   CurrentPiece = generateNewPiece ()
   GameInput = NoOp
   LastTimestampMs = 0.0
+  Acceleration = None
 }
 
 module Collision =
@@ -100,7 +104,7 @@ let gameInput (input: GameInput) (state: GameState) : GameState =
   | Up -> 
     state.CurrentPiece |> Piece.updateShape Shape.rotateClockwise |> updatePieceIfNoCollision state
   | Down -> 
-    { state with CurrentPiece = state.CurrentPiece |> Piece.updateState (Dropped Constants.DroppedFramesNumber) }
+    { state with Acceleration = Accelerated Constants.AccelerationFramesNumber }
   | NoOp -> state
 
 let dropTetromino (state: GameState): GameState =
@@ -108,14 +112,7 @@ let dropTetromino (state: GameState): GameState =
     if hasPieceLanded state.Screen state.CurrentPiece then
       state.CurrentPiece |> Piece.updateState Landed
     else 
-      let nextPieceState = 
-        match state.CurrentPiece.State with
-        | Landed -> Landed
-        | Falling -> Falling
-        | Dropped frames when frames > 0 -> Dropped (frames - 1)
-        | Dropped _ -> Falling
-
-      state.CurrentPiece |> Piece.updatePosition Position.moveDown |> Piece.updateState nextPieceState
+      state.CurrentPiece |> Piece.updatePosition Position.moveDown
 
   { state with CurrentPiece = currentPiece }
 
@@ -129,17 +126,25 @@ let landTetromino (state: GameState): GameState =
     
 let updateTetromino (state: GameState): GameState =
   match state.CurrentPiece.State with
-  | Falling 
-  | Dropped _ -> dropTetromino state
+  | Falling -> dropTetromino state
   | Landed -> landTetromino state
+
+let updateAcceleration (state: GameState): GameState =
+  let acceleration =
+    match state.Acceleration with
+    | Accelerated frames when frames > 0 -> Accelerated (frames - 1)
+    | Accelerated _ -> None
+    | None -> None
+
+  { state with Acceleration = acceleration }
 
 let gameLoop (timestamp: float) (state: GameState): GameState =
   let currentTimeout = Timer.getTimerMs state
   let elapsed = timestamp - state.LastTimestampMs
   
   if elapsed >= (currentTimeout |> float) then 
-    { state with LastTimestampMs = timestamp } |> updateTetromino
+    { state with LastTimestampMs = timestamp } 
+      |> updateTetromino 
+      |> updateAcceleration
   else 
     state
-  
-    

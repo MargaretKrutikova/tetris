@@ -37,7 +37,7 @@ type Tile = {
   Position: Position
 }
 
-type Screen = Tile[]
+type Screen = Tile list list
 
 module Position =
   let areEqual (posLeft: Position) (posRight: Position): bool =
@@ -86,9 +86,46 @@ module Screen =
   let getAbsolutePosition (screenPosition: Position) (relativePosition: Position): Position =
       { Row = relativePosition.Row + screenPosition.Row; Col = relativePosition.Col + screenPosition.Col}
 
+  let findTileAtPosition (position: Position) (screen: Screen): Tile option =
+    screen |> Seq.concat |> Seq.tryFind (fun tile -> Position.areEqual tile.Position position)
+
   let makeEmptyScreen (Width width) (Height height) : Screen =
     Array.init height (fun rowIndex -> 
-      Array.init width (fun colIndex -> Tile.make Empty rowIndex colIndex)
+      Array.init width (fun colIndex -> Tile.make Empty rowIndex colIndex) |> Seq.toList
     ) 
-    |> Seq.concat 
-    |> Seq.toArray
+    |> Seq.toList
+
+  let private isLineFilled (line: Tile seq): bool =
+    line |> Seq.forall (fun tile -> isTileFilled tile.Type)
+
+  let private initEmptyLine (Width screenWidth) (row: int) : Tile list =
+    Seq.init screenWidth (fun ind -> Tile.make Empty row ind) |> Seq.toList
+
+  let private shiftLineDown (line: Tile list): Tile list =
+    line |> Seq.map (fun tile -> { tile with Position = Position.moveDown tile.Position }) |> Seq.toList
+
+  let (|Filled|NotFilled|) (line: Tile seq) =
+    if isLineFilled line then
+      Filled
+    else 
+      NotFilled
+
+  let rec private removeFilledLinesInternal (screenWidth: Width) (linesRemoved, screen): int * Screen =
+    let (found, shiftedLines) =
+      Seq.foldBack (fun currentLine (hasFilledLine, lines) -> 
+        if hasFilledLine then
+          (hasFilledLine, (shiftLineDown currentLine) :: lines)
+        else
+          match currentLine with
+          | Filled -> (true, lines)
+          | NotFilled -> (false, currentLine :: lines)
+      ) screen (false, List.empty) 
+
+    if found then 
+      (linesRemoved + 1, (initEmptyLine screenWidth 0) :: shiftedLines)
+    else 
+      (linesRemoved, shiftedLines)
+
+  let removeFilledLines (screenWidth: Width) (screen: Screen): int * Screen =
+    removeFilledLinesInternal screenWidth (0, screen)
+

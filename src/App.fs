@@ -104,7 +104,7 @@ let drawScreen (state: Tetris.GameState) =
             Height(TileSizePx * height)
             Width(TileSizePx * width)
         ] ] 
-        (state.Screen |> Seq.map drawScreenTile |> Seq.toArray)
+        (state.Screen |> Seq.collect (Seq.map drawScreenTile) |> Seq.toArray)
 
 let view (model: Model) dispatch =
   div [ Style [ Position PositionOptions.Relative; ] ]

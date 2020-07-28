@@ -42,6 +42,7 @@ let newPieceFromTetramino (tetromino: Tetromino): Piece =
 
 let generateNewPiece () =
   let tetromino = generateRandomTetromino () 
+  Browser.Dom.console.log (sprintf "%A" tetromino)
   newPieceFromTetramino tetromino
 
 let initGameState (): GameState = {
@@ -56,7 +57,7 @@ let initGameState (): GameState = {
 module Collision =
   let private isPositionOccuped (screen: Screen) (position: Position) =
     screen 
-      |> Seq.tryFind (fun tile -> Position.areEqual tile.Position position)
+      |> Screen.findTileAtPosition position
       |> Option.map (fun tile -> isTileFilled tile.Type)
       |> Option.defaultValue true
 
@@ -72,7 +73,9 @@ let updatePieceIfNoCollision (gameState: GameState) (piece: Piece) =
     { gameState with CurrentPiece = piece }
 
 let hasPieceLanded (screen: Screen) (piece: Piece) =
-  piece |> Piece.updatePosition Position.moveDown |> Collision.hasCollisions screen
+  piece 
+  |> Piece.updatePosition Position.moveDown 
+  |> Collision.hasCollisions screen
 
 let drawPiece (piece: Piece) (screen: Screen): Screen =
   let getPieceTileType (screenPosition: Position) = 
@@ -84,7 +87,7 @@ let drawPiece (piece: Piece) (screen: Screen): Screen =
   let updateScreenTileType (screenTile: Tile): Tile =
     { screenTile with Type = getPieceTileType screenTile.Position |> Option.defaultValue screenTile.Type }
 
-  screen |> Seq.map (updateScreenTileType) |> Seq.toArray
+  screen |> Seq.map (Seq.map updateScreenTileType >> Seq.toList) |> Seq.toList
 
 let gameInput (input: GameInput) (state: GameState) : GameState =
   match input with
@@ -98,33 +101,6 @@ let gameInput (input: GameInput) (state: GameState) : GameState =
     { state with CurrentPiece = state.CurrentPiece |> Piece.updateState Dropped }
   | NoOp -> state
 
-let private isLineFilled (line: Tile seq): bool =
-  line |> Seq.forall (fun tile -> isTileFilled tile.Type)
-
-let private initEmptyLine (Screen.Width screenWidth) (row: int) : Tile seq =
-  Seq.init screenWidth (fun ind -> Tile.make Empty row ind)
-
-let private removeFilledRows (Screen.Height height) (width: Screen.Width) (screen: Screen): Screen =
-  let notFilledLines =
-    screen 
-    |> Seq.groupBy (fun tile -> tile.Position.Row)
-    |> Seq.filter (fun (_, line) -> isLineFilled line |> not)
-    |> Seq.map snd
-    |> Seq.toList
-  
-  let linesRemoved = height - (notFilledLines |> Seq.length)
-  let emptyLinesToAdd = Seq.init linesRemoved (initEmptyLine width) |> Seq.toList
-
-  if linesRemoved > 0 then
-    (emptyLinesToAdd @ notFilledLines)
-      |> Seq.mapi (fun rowIndex row -> 
-          row |> Seq.map (fun tile -> { tile with Position = { tile.Position with Row = rowIndex } })
-        )
-     |> Seq.concat
-     |> Seq.toArray
-  else 
-    screen
-
 let dropTetromino (state: GameState): GameState =
   let currentPiece =
     if hasPieceLanded state.Screen state.CurrentPiece then
@@ -136,9 +112,9 @@ let dropTetromino (state: GameState): GameState =
 
 let landTetromino (state: GameState): GameState =
   let nextPiece = generateNewPiece ()
-  let screen = 
+  let (linesRemoved, screen) = 
     drawPiece state.CurrentPiece state.Screen 
-    |> removeFilledRows state.ScreenHeight state.ScreenWidth
+    |> Screen.removeFilledLines state.ScreenWidth
 
   { state with Screen = screen; CurrentPiece = nextPiece }
     

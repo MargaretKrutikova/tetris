@@ -122,12 +122,24 @@ let drawScreen (state: Tetris.GameState) =
         ] ] 
         (state.Screen |> Seq.collect (Seq.map drawScreenTile) |> Seq.toArray)
 
+let nextTetromino (tetromino: Tetromino) =
+    let shape = Tetris.Tetromino.shapeFromTetromino tetromino
+    let color = tetrisColorToCss tetromino.Color
+
+    svg [ Style []] 
+      (shape |> Seq.map (drawTile color) |> Seq.toArray)
+
 let view (model: Model) dispatch =
-  div [ Style [ Position PositionOptions.Relative; ] ]
-      [ 
-          drawScreen model.GameState
-          drawPiece model.GameState.CurrentPiece
-      ] 
+  div [ Style [ Display DisplayOptions.Flex ] ] [
+    div [ Style [ Position PositionOptions.Relative; ] ]
+          [ 
+              drawScreen model.GameState
+              drawPiece model.GameState.CurrentPiece
+          ] 
+    div [] [
+        h3 [ Style [MarginBottom "30px"] ] [str "Next tetromino:"]
+        nextTetromino model.GameState.NextPiece]
+  ]
 
 let timer () =
     let rec gameLoop dispatch =

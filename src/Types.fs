@@ -116,7 +116,7 @@ module Screen =
       ) screen (false, List.empty) 
 
     if found then 
-      (linesRemoved + 1, (initEmptyLine screenWidth 0) :: shiftedLines)
+      (linesRemoved + 1, (initEmptyLine screenWidth 0) :: shiftedLines) |> removeFilledLinesInternal screenWidth
     else 
       (linesRemoved, shiftedLines)
 

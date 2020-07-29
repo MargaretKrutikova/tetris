@@ -6,6 +6,7 @@ open Fable.React
 open Fable.React.Props
 open Browser
 open Tetris.Types
+open Tetris
 
 // CONSTANTS
 
@@ -19,11 +20,11 @@ let TileSizePx = 25
 
 let keyToGameInput (key: string): Tetris.GameInput =
   match key with
-  | "ArrowUp" -> Tetris.Up
-  | "ArrowLeft" -> Tetris.Left
-  | "ArrowRight" -> Tetris.Right
-  | "ArrowDown" -> Tetris.Down
-  | _ -> Tetris.NoOp
+  | "ArrowUp" -> GameInput.Up
+  | "ArrowLeft" -> GameInput.Left
+  | "ArrowRight" -> GameInput.Right
+  | "ArrowDown" -> GameInput.Down
+  | _ -> GameInput.NoOp
 
 let tetrisColorToCss =
     function
@@ -37,45 +38,95 @@ let tetrisColorToCss =
 
 // MODEL
 
+type GameStatus = 
+  | NotStarted 
+  | Playing of GameState
+  | GameOver of GameState
+
 type Model = {
-    GameStatus: Tetris.GameStatus
+    GameStatus: GameStatus
 }
 
 type Msg =
     | GameLoop of timestamp: float
-    | GameMessage of Tetris.Effects.Msg
     | KeyDown of Tetris.GameInput 
     | KeyUp of Tetris.GameInput
     | StartGame
+    | SpawnedTetromino of Tetromino
+    | InitGameDone of pair: (Tetromino * Tetromino)
 
 let init() : Model * Cmd<Msg>= 
-    { GameStatus = Tetris.NotStarted }, Cmd.none 
+    { GameStatus = NotStarted }, Cmd.none 
 
 // UPDATE
 
-let fromGameEffect (gameEffect: Tetris.Effects.Cmd option): Msg Cmd =
-    match gameEffect with
-    | Some effect -> 
-        Cmd.ofSub (fun (dispatch: Msg -> unit) -> 
-            Tetris.Effects.mapEffect effect (GameMessage >> dispatch)
-        )
-    | None -> Cmd.none
+
+let keyDown (input: GameInput) (status: GameStatus) : GameStatus =
+  match status with
+  | Playing state -> processGameInputKeyDown input state |> Playing
+  | _ -> status
+
+let keyUp (input: GameInput) (status: GameStatus) : GameStatus =
+  match status with
+  | Playing state -> processGameInputKeyUp input state |> Playing
+  | _ -> status
+    
+let spawnTetromino dispatch =
+    Tetromino.generateRandomTetromino () |> SpawnedTetromino |> dispatch
+
+let generateStartGameTetrominos dispatch = 
+    (Tetromino.generateRandomTetromino (), Tetromino.generateRandomTetromino ()) 
+        |> InitGameDone 
+        |> dispatch
+
+let updateTetromino (state: GameState): GameState * Msg Cmd =
+  if hasPieceLanded state.Screen state.CurrentPiece then
+    state |> landTetromino, Cmd.ofSub spawnTetromino 
+  else 
+    { state with CurrentPiece = state.CurrentPiece |> Piece.updatePosition Position.moveDown }, Cmd.none
+
+let updateGameState (timestamp: float) (state: GameState): GameState * Msg Cmd =
+  let currentTimeout = Timer.getTimerMs state
+  let elapsed = timestamp - state.LastTimestampMs
+  
+  if elapsed >= (currentTimeout |> float) then 
+    { state with LastTimestampMs = timestamp } |> updateTetromino 
+  else 
+    state, Cmd.none
+
+let checkEndGame (gameState: GameState) =
+  if Collision.hasCollisions gameState.Screen gameState.CurrentPiece then
+    GameOver gameState
+  else 
+    Playing gameState
 
 let update (msg:Msg) (model: Model) =
-    match msg with
-    | GameLoop timestamp -> 
-        let gameStatus, gameEffect = Tetris.gameLoop timestamp model.GameStatus
-        { model with GameStatus = gameStatus }, fromGameEffect gameEffect
+    match msg, model.GameStatus with
+    | GameLoop timestamp, Playing state -> 
+        let gameState, cmd = updateGameState timestamp state
+        { model with GameStatus = Playing gameState }, cmd
 
-    | GameMessage gameMsg -> 
-        let gameStatus, gameEffect = Tetris.processEffects gameMsg model.GameStatus
-        { model with GameStatus = gameStatus }, fromGameEffect gameEffect
+    | KeyDown input, Playing _ -> 
+        { model with GameStatus = keyDown input model.GameStatus }, Cmd.none
 
-    | KeyDown input -> { model with GameStatus = Tetris.keyDown input model.GameStatus }, Cmd.none
-    | KeyUp input -> { model with GameStatus = Tetris.keyUp input model.GameStatus }, Cmd.none
-    | StartGame -> 
-        let gameStatus, gameEffect = Tetris.startGame ()
-        { model with GameStatus = gameStatus }, fromGameEffect gameEffect
+    | KeyUp input, Playing _ -> 
+        { model with GameStatus = keyUp input model.GameStatus }, Cmd.none
+
+    | StartGame, _ -> 
+        { model with GameStatus = NotStarted }, Cmd.ofSub generateStartGameTetrominos
+
+    | SpawnedTetromino tetromino, Playing state ->
+        let gameState = copyNextPieceToCurrent tetromino state |> checkEndGame
+        { model with GameStatus = gameState }, Cmd.none
+        
+    | InitGameDone pair, _ -> 
+        { model with GameStatus = initGameState pair |> Playing }, Cmd.none
+
+    | GameLoop _, _ -> model, Cmd.none
+    | KeyDown _, _ -> model, Cmd.none
+    | KeyUp _, _ -> model, Cmd.none
+    | SpawnedTetromino _, _ -> model, Cmd.none
+
 
 let keyboardInputs dispatch =
     let keyFromEvent (e: Types.Event) =
@@ -149,9 +200,9 @@ let view (model: Model) dispatch =
         button [ OnClick (fun _ -> dispatch StartGame) ] [str "Start"]
         // span [] [sprintf "%A" model |> str]
         match model.GameStatus with
-        | Tetris.NotStarted -> div [] [str "Not Started"] // TODO: draw empty screen 
-        | Tetris.Playing state -> gameView state
-        | Tetris.GameOver state -> gameView state
+        | NotStarted -> div [] [str "Not Started"] // TODO: draw empty screen 
+        | Playing state -> gameView state
+        | GameOver state -> gameView state
     ]
 
 let timer () =
